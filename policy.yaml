@@ -1,0 +1,47 @@
+# Growth Orchestrator policy. This file is the "what are we allowed to automate" contract.
+# RevOps can edit it here or from the Policy screen in the console (saving from the console rewrites
+# the file without these comments). No code change needed for any value below.
+version: 1
+
+eligibility:
+  cooldown_days: 14                      # no new outreach if the contact was contacted in the last N days
+  max_active_contacts_per_account: 3     # do not carpet-bomb an account
+  icp:
+    min_employees: 50
+    countries: [MX, BR, CO]
+
+# Per-action automation mode:
+#   auto     -> the system executes it without a human
+#   assisted -> the system proposes it; a human approves in the review queue
+#   off      -> never executed by the system (logged only)
+automation:
+  handoff_to_ae: auto
+  wait_until: auto
+  create_referral_contact: assisted
+  suppress_contact: auto
+  nurture_long_term: auto
+  enroll_in_sequence: auto
+  enrich_contact: auto
+  notify_csm: auto
+  escalate_to_human: auto
+
+ai:
+  min_confidence_auto: 0.75      # below this the interpretation goes to a human
+  high_risk_intents: [unsubscribe, referral]   # for these we ALSO require confidence >= min_confidence_high_risk
+  min_confidence_high_risk: 0.85
+  freshness_check_before_irreversible: true
+
+# Deterministic mapping: what the interpreted intent means for the pipeline.
+intent_actions:
+  interested: handoff_to_ae
+  out_of_office: wait_until
+  later: wait_until
+  referral: create_referral_contact
+  unsubscribe: suppress_contact
+  not_interested: nurture_long_term
+  pricing_question: handoff_to_ae     # only if in ICP; otherwise escalate (see decision.py)
+  mixed: escalate_to_human
+  unclear: escalate_to_human
+
+defaults:
+  wait_days_when_no_date: 30
