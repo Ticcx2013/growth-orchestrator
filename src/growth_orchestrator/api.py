@@ -5,6 +5,7 @@ Webhook contract: respond fast (202), do the work after. Duplicates are answered
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -19,8 +20,9 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from .config import ROOT
-from .db import iso
-from .models import Action, InboundEvent
+from .db import iso, parse_dt
+from .decision import payload_for
+from .models import Action, InboundEvent, ReplyInterpretation
 from .policy import Policy
 from .runtime import Runtime, build_runtime
 from .seed import seed
@@ -58,14 +60,13 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
         except ValidationError as e:
             raise HTTPException(422, e.errors())
 
-        with rt.lock:
-            ing = rt.orchestrator.ingest(event)
+        # The lock may be held by a worker thread processing another event (a model call takes seconds).
+        # Never wait for it on the event loop: hand the locked work to a thread so other requests keep flowing.
+        ing = await asyncio.to_thread(_ingest_locked, rt, event)
         if ing["status"] == "duplicate":
             return JSONResponse({"status": "duplicate", "event_id": event.event_id}, status_code=200)
         if sync:
-            with rt.lock:
-                result = rt.orchestrator.process(event.event_id)
-                result["trace"] = rt.db.trace(event.event_id)
+            result = await asyncio.to_thread(_process_locked, rt, event.event_id)
             return JSONResponse(result, status_code=200)
         background.add_task(_process_locked, rt, event.event_id)
         return {"status": "accepted", "event_id": event.event_id}
@@ -142,22 +143,39 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
 
     @app.post("/api/review/{item_id}/approve")
     def approve(item_id: int, body: dict[str, Any] | None = None):
-        item = rt.db.one("SELECT r.*, d.payload_json FROM review_queue r JOIN decisions d ON d.id = r.decision_id WHERE r.id = ?", (item_id,))
+        item = rt.db.one(
+            "SELECT r.*, d.payload_json, d.account_id, d.contact_id, d.ai_call_id, e.occurred_at FROM review_queue r"
+            " JOIN decisions d ON d.id = r.decision_id JOIN events e ON e.event_id = r.event_id WHERE r.id = ?", (item_id,))
         if not item or item["status"] != "open":
             raise HTTPException(404, "review item not open")
-        proposed = (body or {}).get("action") or item["proposed_action"]
+        body = body or {}
+        proposed = body.get("action") or item["proposed_action"]
+        if proposed and proposed not in {a.value for a in Action}:
+            raise HTTPException(422, f"unknown action {proposed!r}")
         executed = None
         with rt.lock:
             if proposed and proposed not in ("no_action", "escalate_to_human"):
                 action = Action(proposed)
-                payload = json.loads(item["payload_json"])
+                # The decision may carry no payload (escalations). Rebuild it from current state plus the model's reading,
+                # with the same function the policy engine uses, so approval and automation never disagree.
+                payload = json.loads(item["payload_json"]) or {}
+                if not payload:
+                    account = rt.db.one("SELECT * FROM accounts WHERE id = ?", (item["account_id"],))
+                    contact = rt.db.one("SELECT * FROM contacts WHERE id = ?", (item["contact_id"],))
+                    if not account or not contact:
+                        raise HTTPException(409, "cannot rebuild the action: account or contact no longer exists")
+                    ai_row = rt.db.one("SELECT parsed_json FROM ai_calls WHERE id = ?", (item["ai_call_id"],)) if item["ai_call_id"] else None
+                    interp = ReplyInterpretation.model_validate_json(ai_row["parsed_json"]) if ai_row and ai_row["parsed_json"] else None
+                    payload = payload_for(action, account, contact, interp, rt.policies.load(), parse_dt(item["occurred_at"]))
+                    if action == Action.CREATE_REFERRAL_CONTACT and not payload.get("email"):
+                        raise HTTPException(409, "no referral email in the reply; create the contact by hand")
                 row = rt.orchestrator.outbox.enqueue(decision_id=item["decision_id"], event_id=item["event_id"], action=action, payload=payload)
                 executed = rt.orchestrator.outbox.dispatch(row["idempotency_key"])
-                rt.db.audit(item["event_id"], "human_decision", f"reviewer approved {action.value}", {"review_id": item_id, "by": (body or {}).get("by", "console")})
+                rt.db.audit(item["event_id"], "human_decision", f"reviewer approved {action.value}", {"review_id": item_id, "by": body.get("by", "console")})
             else:
                 rt.db.audit(item["event_id"], "human_decision", "reviewer closed the item with no action", {"review_id": item_id})
             rt.db.exec("UPDATE review_queue SET status='approved', resolved_by=?, resolution_note=?, resolved_at=? WHERE id=?",
-                       ((body or {}).get("by", "console"), (body or {}).get("note"), iso(rt.clock()), item_id))
+                       (body.get("by", "console"), body.get("note"), iso(rt.clock()), item_id))
         return {"status": "approved", "executed": executed}
 
     @app.post("/api/review/{item_id}/reject")
@@ -253,7 +271,7 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
 
     @app.get("/policy", response_class=HTMLResponse)
     def ui_policy(request: Request):
-        return page(request, "policy", actions=[a.value for a in Action if a not in (Action.NO_ACTION,)])
+        return page(request, "policy", actions=[a.value for a in Action if a not in (Action.NO_ACTION, Action.ESCALATE_TO_HUMAN)])
 
     @app.get("/operations", response_class=HTMLResponse)
     def ui_operations(request: Request):
@@ -274,9 +292,15 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
     return app
 
 
-def _process_locked(rt: Runtime, event_id: str) -> None:
+def _ingest_locked(rt: Runtime, event: InboundEvent) -> dict[str, Any]:
+    return rt.orchestrator.ingest(event)  # takes the state lock for milliseconds
+
+
+def _process_locked(rt: Runtime, event_id: str) -> dict[str, Any]:
+    result = rt.orchestrator.process(event_id)  # locks around state changes only, never around the model call
     with rt.lock:
-        rt.orchestrator.process(event_id)
+        result["trace"] = rt.db.trace(event_id)
+    return result
 
 
 app = create_app()

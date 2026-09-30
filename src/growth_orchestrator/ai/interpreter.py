@@ -13,7 +13,7 @@ import json
 import re
 import time
 import unicodedata
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +41,16 @@ def _parse_iso_date(value: str) -> date | None:
         return date.fromisoformat(value[:10])
     except (ValueError, TypeError):
         return None
+
+
+def normalise(interp: ReplyInterpretation) -> ReplyInterpretation:
+    """Trim date-times to dates so every consumer sees YYYY-MM-DD."""
+    ex = interp.extracted
+    for field_name in ("return_date", "follow_up_date"):
+        raw = getattr(ex, field_name)
+        if raw and len(raw) > 10 and _parse_iso_date(raw) is not None:
+            setattr(ex, field_name, raw[:10])
+    return interp
 
 
 def validate(interp: ReplyInterpretation, reply_text: str, reply_date: date) -> list[str]:
@@ -140,7 +150,7 @@ class ReplyInterpreter:
                 validation_errors=["no recorded response for this reply (offline mode)"],
             )
         try:
-            interp = ReplyInterpretation.model_validate(fx["parsed"])
+            interp = normalise(ReplyInterpretation.model_validate(fx["parsed"]))
         except ValidationError as e:
             return AIResult(interpretation=None, valid=False, mode="offline", model="fixtures",
                             prompt_version=PROMPT_VERSION, validation_errors=[f"schema: {e.errors()[0]['msg']}"])
@@ -150,6 +160,10 @@ class ReplyInterpreter:
             model=fx.get("meta", {}).get("model", "fixtures"), prompt_version=fx.get("meta", {}).get("prompt_version", PROMPT_VERSION),
             raw_output=json.dumps(fx["parsed"], ensure_ascii=False),
         )
+
+    def _api_failure(self, error: str, attempts: int, started: float) -> AIResult:
+        return AIResult(interpretation=None, valid=False, mode="live", model=self.settings.model, prompt_version=PROMPT_VERSION,
+                        attempts=attempts, latency_ms=int((time.perf_counter() - started) * 1000), validation_errors=[error])
 
     def _interpret_live(self, reply_text: str, reply_at: datetime, reply_date: date, context: dict[str, Any]) -> AIResult:
         import anthropic
@@ -174,14 +188,11 @@ class ReplyInterpreter:
                     output_config={"effort": "medium"},
                 )
             except anthropic.RateLimitError as e:
-                return AIResult(interpretation=None, valid=False, mode="live", model=self.settings.model,
-                                prompt_version=PROMPT_VERSION, attempts=attempts, validation_errors=[f"rate_limited: {e}"])
+                return self._api_failure(f"rate_limited: {e}", attempts, started)
             except anthropic.APIStatusError as e:
-                return AIResult(interpretation=None, valid=False, mode="live", model=self.settings.model,
-                                prompt_version=PROMPT_VERSION, attempts=attempts, validation_errors=[f"api_error {e.status_code}: {e.message}"])
+                return self._api_failure(f"api_error {e.status_code}: {e.message}", attempts, started)
             except anthropic.APIConnectionError as e:
-                return AIResult(interpretation=None, valid=False, mode="live", model=self.settings.model,
-                                prompt_version=PROMPT_VERSION, attempts=attempts, validation_errors=[f"connection_error: {e}"])
+                return self._api_failure(f"connection_error: {e}", attempts, started)
 
             total_in += response.usage.input_tokens
             total_out += response.usage.output_tokens
@@ -197,6 +208,7 @@ class ReplyInterpreter:
             if interp is None:
                 last_errors = ["model returned no parseable output"]
             else:
+                interp = normalise(interp)
                 last_errors = validate(interp, reply_text, reply_date)
             if not last_errors:
                 break
@@ -214,5 +226,5 @@ class ReplyInterpreter:
         if self.settings.ai_mode == "record" and interp is not None:
             self._save_fixture(reply_text, interp.model_dump(mode="json"),
                                {"model": self.settings.model, "prompt_version": PROMPT_VERSION, "valid": result.valid,
-                                "validation_errors": last_errors, "recorded_at": datetime.utcnow().isoformat() + "Z"})
+                                "validation_errors": last_errors, "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
         return result

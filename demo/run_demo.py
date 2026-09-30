@@ -19,7 +19,7 @@ from growth_orchestrator.runtime import build_runtime  # noqa: E402
 STAGE_ICON = {
     "received": "IN ", "duplicate": "DUP", "state_loaded": "ST ", "ordering": "ORD", "stale_event": "OLD", "state_updated": "ST+",
     "eligibility": "ELG", "compliance": "LAW", "ai_interpretation": "AI ", "ai_validation": "CHK", "decision": "DEC",
-    "freshness_check": "FRS", "automation_mode": "MOD", "action_enqueued": "OUT", "action_dispatched": "ACT", "action_uncertain": "???",
+    "freshness_check": "FRS", "action_enqueued": "OUT", "action_dispatched": "ACT", "action_uncertain": "???",
     "action_reconciled": "RCN", "action_retry_scheduled": "RTY", "action_dead": "DLQ", "review_queued": "HUM", "completed": "END", "failed": "ERR",
 }
 

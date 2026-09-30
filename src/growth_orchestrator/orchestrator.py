@@ -7,6 +7,7 @@ audit log under the event id, so the trace for any event can be reconstructed en
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime
 from typing import Any, Callable
 
@@ -25,18 +26,25 @@ class IngestResult(dict):
 
 class Orchestrator:
     def __init__(self, db: Database, crm: CRMClient, interpreter: ReplyInterpreter, policies: PolicyStore,
-                 clock: Callable[[], datetime] = utcnow):
+                 clock: Callable[[], datetime] = utcnow, lock: threading.RLock | None = None):
         self.db = db
         self.crm = crm
         self.interpreter = interpreter
         self.policies = policies
         self.clock = clock
+        # One writer at a time for state changes. The lock is NOT held during the model call, which can take
+        # seconds: the pipeline reads state, releases, asks the model, then re-reads state before deciding.
+        self.lock = lock or threading.RLock()
         self.outbox = Outbox(db, crm, clock)
 
     # ------------------------------------------------------------------------------
     # 1. Ingest (idempotent)
     # ------------------------------------------------------------------------------
     def ingest(self, event: InboundEvent) -> IngestResult:
+        with self.lock:
+            return self._ingest(event)
+
+    def _ingest(self, event: InboundEvent) -> IngestResult:
         now = iso(self.clock())
         try:
             with self.db.tx():
@@ -57,14 +65,15 @@ class Orchestrator:
     # 2..6 Process
     # ------------------------------------------------------------------------------
     def process(self, event_id: str) -> dict[str, Any]:
-        row = self.db.one("SELECT * FROM events WHERE event_id = ?", (event_id,))
-        if row is None:
-            raise KeyError(event_id)
-        if row["status"] not in ("received", "failed"):
-            return {"event_id": event_id, "status": row["status"], "note": "already processed"}
-        event = InboundEvent(event_id=row["event_id"], type=EventType(row["type"]), occurred_at=parse_dt(row["occurred_at"]),
-                             payload=json.loads(row["payload_json"]))
-        self.db.exec("UPDATE events SET status='processing' WHERE event_id=?", (event_id,))
+        with self.lock:
+            row = self.db.one("SELECT * FROM events WHERE event_id = ?", (event_id,))
+            if row is None:
+                raise KeyError(event_id)
+            if row["status"] not in ("received", "failed"):
+                return {"event_id": event_id, "status": row["status"], "note": "already processed"}
+            event = InboundEvent(event_id=row["event_id"], type=EventType(row["type"]), occurred_at=parse_dt(row["occurred_at"]),
+                                 payload=json.loads(row["payload_json"]))
+            self.db.exec("UPDATE events SET status='processing' WHERE event_id=?", (event_id,))
         try:
             handler = {
                 EventType.PROSPECT_IDENTIFIED: self._on_prospect_identified,
@@ -72,14 +81,16 @@ class Orchestrator:
                 EventType.CRM_ACCOUNT_UPDATED: self._on_account_updated,
                 EventType.CONTACT_UNSUBSCRIBED: self._on_unsubscribed,
             }[event.type]
-            result = handler(event)
-            status = result.get("status", "processed")
-            self.db.exec("UPDATE events SET status=?, processed_at=? WHERE event_id=?", (status, iso(self.clock()), event_id))
-            self.db.audit(event_id, "completed", f"event {status}", {"result": {k: v for k, v in result.items() if k != 'trace'}})
+            result = handler(event)  # each handler takes the lock for its state-changing sections
+            with self.lock:
+                status = result.get("status", "processed")
+                self.db.exec("UPDATE events SET status=?, processed_at=? WHERE event_id=?", (status, iso(self.clock()), event_id))
+                self.db.audit(event_id, "completed", f"event {status}", {"result": {k: v for k, v in result.items() if k != 'trace'}})
             return result
         except Exception as e:
-            self.db.exec("UPDATE events SET status='failed', error=? WHERE event_id=?", (str(e), event_id))
-            self.db.audit(event_id, "failed", f"unhandled error: {e}")
+            with self.lock:
+                self.db.exec("UPDATE events SET status='failed', error=? WHERE event_id=?", (str(e), event_id))
+                self.db.audit(event_id, "failed", f"unhandled error: {e}")
             raise
 
     def handle(self, event: InboundEvent) -> dict[str, Any]:
@@ -93,6 +104,19 @@ class Orchestrator:
     # ------------------------------------------------------------------------------
     # Handlers
     # ------------------------------------------------------------------------------
+    def _load_quiet(self, event: InboundEvent) -> tuple[dict | None, dict | None]:
+        contact = account = None
+        cid = event.payload.get("contact_id")
+        email = event.payload.get("contact_email")
+        if cid:
+            contact = self.db.one("SELECT * FROM contacts WHERE id = ?", (cid,))
+        elif email:
+            contact = self.db.one("SELECT * FROM contacts WHERE lower(email) = lower(?)", (email,))
+        aid = event.payload.get("account_id") or (contact and contact["account_id"])
+        if aid:
+            account = self.db.one("SELECT * FROM accounts WHERE id = ?", (aid,))
+        return account, contact
+
     def _load(self, event: InboundEvent) -> tuple[dict | None, dict | None]:
         contact = account = None
         cid = event.payload.get("contact_id")
@@ -110,6 +134,10 @@ class Orchestrator:
         return account, contact
 
     def _on_prospect_identified(self, event: InboundEvent) -> dict[str, Any]:
+        with self.lock:
+            return self._on_prospect_identified_locked(event)
+
+    def _on_prospect_identified_locked(self, event: InboundEvent) -> dict[str, Any]:
         policy = self.policies.load()
         account, contact = self._load(event)
         if account is None or contact is None:
@@ -121,37 +149,52 @@ class Orchestrator:
         return self._commit(event, account, contact, d, ai=None, policy_version=policy.version)
 
     def _on_reply(self, event: InboundEvent) -> dict[str, Any]:
-        policy = self.policies.load()
-        account, contact = self._load(event)
         text = (event.payload.get("text") or "").strip()
-        if account is None or contact is None:
-            d = Decision(action=Action.ESCALATE_TO_HUMAN, automated=True, requires_review=True,
-                         reason="reply from an unknown contact/account: a human maps it", trace=[])
-            return self._commit(event, account, contact, d, ai=None, policy_version=policy.version)
 
-        # Out-of-order guard: a reply that predates the last state change is still a reply, but we
-        # evaluate it against CURRENT state (not the state at send time). That is the safe direction.
-        state_at = parse_dt(account["state_updated_at"])
-        if state_at and event.occurred_at < state_at:
-            self.db.audit(event.event_id, "ordering", "reply occurred before the latest account state change; evaluating against current state",
-                          {"occurred_at": iso(event.occurred_at), "state_updated_at": account["state_updated_at"]})
+        # Phase 1 (locked): read state, run the rules, decide whether the model is needed at all.
+        with self.lock:
+            policy = self.policies.load()
+            account, contact = self._load(event)
+            if account is None or contact is None:
+                d = Decision(action=Action.ESCALATE_TO_HUMAN, automated=True, requires_review=True,
+                             reason="reply from an unknown contact/account: a human maps it", trace=[])
+                return self._commit(event, account, contact, d, ai=None, policy_version=policy.version)
 
-        elig = eligibility.evaluate(self.db, account, contact, policy, self.clock(), purpose="reply")
-        self.db.audit(event.event_id, "eligibility", "eligible" if elig.eligible else f"blocked: {', '.join(elig.blockers)}", elig.as_dict())
+            # Out-of-order guard: a reply that predates the last state change is still a reply, but we
+            # evaluate it against CURRENT state (not the state at send time). That is the safe direction.
+            state_at = parse_dt(account["state_updated_at"])
+            if state_at and event.occurred_at < state_at:
+                self.db.audit(event.event_id, "ordering", "reply occurred before the latest account state change; evaluating against current state",
+                              {"occurred_at": iso(event.occurred_at), "state_updated_at": account["state_updated_at"]})
 
-        comp = compliance.check_reply(text)
-        self.db.audit(event.event_id, "compliance",
-                      ("OPT-OUT detected by rule" if comp.opt_out else "no opt-out") + ("; injection heuristics matched" if comp.injection_suspected else ""),
-                      comp.as_dict())
+            elig = eligibility.evaluate(self.db, account, contact, policy, self.clock(), purpose="reply")
+            self.db.audit(event.event_id, "eligibility", "eligible" if elig.eligible else f"blocked: {', '.join(elig.blockers)}", elig.as_dict())
 
-        # The model only runs when its output could matter. Blocked accounts and pure opt-outs are decided by rules.
+            comp = compliance.check_reply(text)
+            self.db.audit(event.event_id, "compliance",
+                          ("OPT-OUT detected by rule" if comp.opt_out else "no opt-out") + ("; injection heuristics matched" if comp.injection_suspected else ""),
+                          comp.as_dict())
+            needs_ai = not elig.blockers or comp.opt_out  # blocked accounts are decided by rules; the model would add nothing
+            context = {"account_name": account["name"], "country": account.get("country"), "employee_count": account.get("employee_count"),
+                       "contact_name": contact.get("name"), "contact_email": contact["email"]}
+
+        # Phase 2 (NOT locked): the model call. Other events keep flowing while we wait for it.
         ai: AIResult | None = None
-        needs_ai = not elig.blockers or elig.blockers == ["out_of_icp"]
-        if needs_ai or comp.opt_out:
-            ai = self.interpreter.interpret(text, event.occurred_at, {
-                "account_name": account["name"], "country": account.get("country"), "employee_count": account.get("employee_count"),
-                "contact_name": contact.get("name"), "contact_email": contact["email"],
-            })
+        if needs_ai:
+            ai = self.interpreter.interpret(text, event.occurred_at, context)
+
+        # Phase 3 (locked): the state may have moved while the model was thinking. Re-read it and decide on current facts.
+        with self.lock:
+            return self._decide_and_commit_reply(event, text, elig, comp, ai, policy)
+
+    def _decide_and_commit_reply(self, event: InboundEvent, text: str, elig, comp, ai: AIResult | None, policy) -> dict[str, Any]:
+        account, contact = self._load_quiet(event)
+        fresh_elig = eligibility.evaluate(self.db, account, contact, policy, self.clock(), purpose="reply")
+        if fresh_elig.blockers != elig.blockers:
+            self.db.audit(event.event_id, "state_loaded", "state changed while the model was reading; re-evaluated on current state",
+                          {"before": elig.blockers, "after": fresh_elig.blockers})
+            elig = fresh_elig
+        if ai is not None:
             ai.ai_call_id = self._record_ai_call(event.event_id, text, ai)
             self.db.audit(event.event_id, "ai_interpretation",
                           (f"intent={ai.interpretation.intent.value} confidence={ai.interpretation.confidence:.2f} flags={[f.value for f in ai.interpretation.risk_flags]}"
@@ -178,6 +221,10 @@ class Orchestrator:
         return self._commit(event, account, contact, d, ai=ai, policy_version=policy.version)
 
     def _on_account_updated(self, event: InboundEvent) -> dict[str, Any]:
+        with self.lock:
+            return self._on_account_updated_locked(event)
+
+    def _on_account_updated_locked(self, event: InboundEvent) -> dict[str, Any]:
         p = event.payload
         account = self.db.one("SELECT * FROM accounts WHERE id = ?", (p.get("account_id"),))
         if account is None:
@@ -195,7 +242,7 @@ class Orchestrator:
             self.db.exec(f"UPDATE accounts SET {cols}, state_version = state_version + 1, state_updated_at = ? WHERE id = ?",
                          (*fields.values(), iso(event.occurred_at), account["id"]))
         self.db.audit(event.event_id, "state_updated", f"account state advanced to version {account['state_version'] + 1}", {"changes": fields})
-        if isinstance(self.crm, object) and hasattr(self.crm, "sync_account"):
+        if hasattr(self.crm, "sync_account"):
             updated = self.db.one("SELECT * FROM accounts WHERE id = ?", (account["id"],))
             self.crm.sync_account(updated)  # in the demo the CRM mock mirrors the truth the event carried
 
@@ -206,6 +253,10 @@ class Orchestrator:
         return {"status": "processed", "action": Action.NO_ACTION.value, "changes": fields}
 
     def _on_unsubscribed(self, event: InboundEvent) -> dict[str, Any]:
+        with self.lock:
+            return self._on_unsubscribed_locked(event)
+
+    def _on_unsubscribed_locked(self, event: InboundEvent) -> dict[str, Any]:
         policy = self.policies.load()
         account, contact = self._load(event)
         if contact is None:

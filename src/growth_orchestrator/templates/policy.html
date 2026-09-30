@@ -124,9 +124,9 @@ function policyPage() {
     },
     preset(kind) {
       const all = Object.keys(this.policy.automation);
-      if (kind === 'shadow') all.forEach(a => this.policy.automation[a] = a === 'escalate_to_human' ? 'auto' : 'assisted');
+      if (kind === 'shadow') all.forEach(a => this.policy.automation[a] = 'assisted');
       if (kind === 'autonomous') all.forEach(a => this.policy.automation[a] = 'auto');  // thresholds stay: autonomy is about who approves, not about being less careful
-      if (kind === 'kill') all.forEach(a => this.policy.automation[a] = a === 'escalate_to_human' ? 'auto' : 'off');
+      if (kind === 'kill') all.forEach(a => this.policy.automation[a] = 'off');
       if (kind === 'conservative') { all.forEach(a => this.policy.automation[a] = 'auto'); this.policy.automation.create_referral_contact = 'assisted';
         this.policy.ai.min_confidence_auto = 0.75; this.policy.ai.min_confidence_high_risk = 0.85; }
     },

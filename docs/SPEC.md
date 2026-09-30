@@ -11,10 +11,10 @@ Out of scope on purpose: AI personalization, multichannel, real sending, calenda
 ## Milestones and acceptance criteria
 
 ### M1 Core without AI
-- `POST /events` returns 202 in under 100 ms and processes in the background; duplicate `event_id` returns 200 and does nothing. → `tests/test_api.py`, `tests/test_idempotency.py`
+- `POST /events` returns 202 before processing, never waits for the model on the event loop, and processes in the background; duplicate `event_id` returns 200 and does nothing. → `tests/test_api.py` (including `test_webhook_does_not_block_on_a_slow_model`), `tests/test_idempotency.py`
 - Persistent accounts, contacts, suppressions, events, decisions, actions, review queue, audit log in SQLite. → `db.py`
 - Eight eligibility rules, all deterministic. → `tests/test_eligibility.py`
-- Opt-out and injection rules in ES/PT/EN with no false positives on "not interested". → `tests/test_compliance.py`
+- Opt-out and injection rules in ES/PT/EN, with negative tests for "not interested", negated opt-outs and normal sales talk. → `tests/test_compliance.py`
 - Policy from `policy.yaml`: automation mode per action, thresholds, intent → action map. → `tests/test_policy_engine.py`
 - Outbox with idempotency key per action and a mock CRM that honours keys. → `tests/test_idempotency.py`
 

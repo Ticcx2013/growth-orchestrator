@@ -18,7 +18,7 @@ There is also one place where the model *could* have decided and does not: the m
 
 ## The most important tradeoff
 
-**Precision over coverage.** Roughly 15–25% of replies will go to a human under the default policy (mixed, unclear, low confidence, high-risk intents in assisted mode, pricing outside ICP). A more aggressive design would automate more and be wrong more often, and a wrong handoff or a missed opt-out costs far more than a reviewed item.
+**Precision over coverage.** On the evaluation set, 5 of 15 replies go to a human under the default policy (mixed, unclear, injection, pricing outside ICP, the assisted referral); the set over-represents hard cases on purpose, so on real traffic the expectation is 15–25%, to be measured in shadow mode. A more aggressive design would automate more and be wrong more often, and a wrong handoff or a missed opt-out costs far more than a reviewed item.
 
 The corollary is that the model's output is treated as a claim, not a fact: evidence must be verbatim, extracted emails and numbers must appear in the text, dates must be in the future, and one repair round is allowed before a human takes over. This costs a few lines of validation and buys the right to say "the system never invented a referral".
 

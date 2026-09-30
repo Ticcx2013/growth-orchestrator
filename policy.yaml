@@ -23,7 +23,7 @@ automation:
   enroll_in_sequence: auto
   enrich_contact: auto
   notify_csm: auto
-  escalate_to_human: auto
+  # escalate_to_human is not listed: sending something to a human is always allowed.
 
 ai:
   min_confidence_auto: 0.75      # below this the interpretation goes to a human

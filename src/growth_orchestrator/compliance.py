@@ -43,22 +43,26 @@ OPT_OUT_PATTERNS: dict[str, list[str]] = {
         r"\bdo not (contact|email|message|call) (me|us) (again|anymore)\b",
         r"\bdon'?t (contact|email|message|call) (me|us) (again|anymore)\b",
         r"\bdelete my (data|information)\b",
-        r"\bno (further|more) (emails|contact|messages)\b",
+        r"\b(please,? )?no (further|more) (emails|contact|messages)[.!,]?\s*(please|thanks|thank you)?[.!]?\s*$",
     ],
 }
 
+# "I don't want to unsubscribe, keep sending" must not read as an opt-out.
+NEGATED_OPT_OUT = re.compile(r"\b(don'?t|do not|not|never|no) (want to |wish to |need to |quiero |queremos |quero )?(unsubscribe|opt[- ]?out|dar(me|nos)? de baja|descadastrar)")
+
 # Text that tries to talk to the model instead of to the SDR.
+# Text that tries to talk to the model instead of to the SDR. Kept narrow on purpose: a false positive here
+# sends an interested prospect to a human, which is safe but costs speed; so patterns must not match normal sales talk.
 INJECTION_PATTERNS = [
     r"\bignore (all |the |your )?(previous|prior|above) (instructions|prompts?)\b",
     r"\bignora (todas )?(las )?instrucciones (anteriores|previas)\b",
     r"\bignore (as )?instru[cç][oõ]es (anteriores|acima)\b",
-    r"\b(you are|act as|pretend to be) (now )?(a|an|the) \w+",
+    r"\b(you are now|from now on you are|act as|pretend to be|pretend you are) (a |an |the )?(helpful |sales |ai |virtual )?(assistant|bot|ai|model|system|agent)\b",
     r"\bsystem prompt\b",
     r"\b(classify|mark|label|set|tag) (this|it|the (reply|intent|message)) as\b",
     r"\b(clasifica|marca|etiqueta) (esto|este mensaje|la respuesta) como\b",
     r"\b(intent|confidence|action)\s*[:=]\s*[\"']?\w+",
-    r"\bassistant\s*:",
-    r"\b(schedule|book|create) (a|the) (demo|meeting|deal) (automatically|now|immediately)\b",
+    r"\b(schedule|book|create) (a|the) (demo|meeting|deal) (automatically|immediately|without asking)\b",
     r"\[\s*(system|assistant|instruction)\s*\]",
     r"\b(output|return|respond with) (only )?(json|the following)\b",
 ]
@@ -91,10 +95,11 @@ class ComplianceResult:
 def check_reply(text: str) -> ComplianceResult:
     norm = _normalize(text)
     result = ComplianceResult()
+    negated = NEGATED_OPT_OUT.search(norm) is not None
     for lang, patterns in OPT_OUT_PATTERNS.items():
         for pat in patterns:
             m = re.search(pat, norm)
-            if m:
+            if m and not (negated and NEGATED_OPT_OUT.search(norm).end() >= m.start()):
                 result.opt_out = True
                 result.opt_out_matches.append(f"{lang}: {m.group(0)}")
     for pat in INJECTION_PATTERNS:

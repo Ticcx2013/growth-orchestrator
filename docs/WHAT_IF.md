@@ -29,7 +29,7 @@ Six changes a panel might propose live, with what moves in the code and what doe
 ## 5. "No humans in the loop. Everything automated from day one."
 
 - **What the policy file allows:** set every action to `auto` (the "Fully autonomous" preset) and lower the confidence gates. The system will run.
-- **What I would say:** ambiguous, contradictory and injected replies still have to go somewhere. Without a queue they either get a default action (unsafe) or get dropped (lost pipeline). The honest version of "no humans" is a much narrower automated scope and a *later*, not earlier, shadow-mode gate. I would keep `escalate_to_human` as the fallback for the small residual and measure how small it is; on the evaluation set it is ~25% under conservative thresholds and would fall with data.
+- **What I would say:** ambiguous, contradictory and injected replies still have to go somewhere. Without a queue they either get a default action (unsafe) or get dropped (lost pipeline). The honest version of "no humans" is a much narrower automated scope and a *later*, not earlier, shadow-mode gate. I would keep `escalate_to_human` as the fallback for the small residual and measure how small it is; on the evaluation set it is a third under conservative thresholds, on a set built from hard cases, and would fall with data.
 
 ## 6. "The model gets it wrong on Brazilian Portuguese slang."
 

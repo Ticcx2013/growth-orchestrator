@@ -47,3 +47,26 @@ def test_injection_detected(text):
 def test_plain_reply_has_no_flags():
     r = check_reply("Hola Sofía, sí me interesa. ¿Podemos el jueves a las 10?")
     assert not r.opt_out and not r.injection_suspected
+
+
+@pytest.mark.parametrize("text", [
+    "No more emails needed, we're ready to sign.",
+    "We don't want to unsubscribe, keep sending the newsletter.",
+    "No queremos darnos de baja, sigan mandando.",
+])
+def test_negated_or_incidental_opt_out_phrases_do_not_suppress(text):
+    assert not check_reply(text).opt_out, text
+
+
+@pytest.mark.parametrize("text", [
+    "Let's schedule a demo now, this week works.",
+    "Executive Assistant: María López, on behalf of the CFO.",
+    "I think you are the right vendor for us.",
+    "Assistant to the director here; he's interested.",
+])
+def test_normal_sales_talk_is_not_flagged_as_injection(text):
+    assert not check_reply(text).injection_suspected, text
+
+
+def test_still_catches_a_plain_no_more_emails():
+    assert check_reply("No more emails, thanks.").opt_out

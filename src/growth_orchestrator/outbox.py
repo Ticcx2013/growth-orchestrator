@@ -15,8 +15,9 @@ from .db import Database, iso, utcnow
 from .integrations.crm import CRMClient, PermanentError, RateLimited, UncertainOutcome
 from .models import Action
 
-MAX_ATTEMPTS = 4
-BACKOFF_SECONDS = [30, 120, 600]  # after attempt 1, 2, 3
+MAX_ATTEMPTS = 4                     # applies to uncertain outcomes AND rate limits; then dead-letter
+BACKOFF_SECONDS = [30, 120, 600]     # after attempt 1, 2, 3
+IN_FLIGHT_GRACE_SECONDS = 600        # an in_flight row older than this is treated as an uncertain outcome
 
 
 def idempotency_key(event_id: str, action: Action) -> str:
@@ -74,11 +75,14 @@ class Outbox:
         try:
             result = self._execute(action, payload, key)
         except RateLimited as e:
-            delay = max(e.retry_after_s, _backoff(attempt))
-            nxt = now + timedelta(seconds=delay)
-            self._set(key, status="pending", next_attempt_at=iso(nxt), last_error=str(e))
-            self.db.audit(event_id, "action_retry_scheduled", f"CRM rate-limited (429); retry #{attempt + 1} in {int(delay)}s",
-                          {"idempotency_key": key, "next_attempt_at": iso(nxt)})
+            if attempt >= MAX_ATTEMPTS:
+                self._dead(key, event_id, f"still rate-limited after {attempt} attempts: {e}")
+            else:
+                delay = max(e.retry_after_s, _backoff(attempt))
+                nxt = now + timedelta(seconds=delay)
+                self._set(key, status="pending", next_attempt_at=iso(nxt), last_error=str(e))
+                self.db.audit(event_id, "action_retry_scheduled", f"CRM rate-limited (429); retry #{attempt + 1} in {int(delay)}s",
+                              {"idempotency_key": key, "next_attempt_at": iso(nxt)})
         except UncertainOutcome as e:
             if attempt >= MAX_ATTEMPTS:
                 self._dead(key, event_id, f"uncertain after {attempt} attempts: {e}")
@@ -90,6 +94,8 @@ class Outbox:
                               {"idempotency_key": key, "next_attempt_at": iso(nxt)})
         except PermanentError as e:
             self._dead(key, event_id, f"permanent error: {e}")
+        except Exception as e:  # a bug in an executor must never strand a row in in_flight
+            self._dead(key, event_id, f"unexpected error in executor: {type(e).__name__}: {e}")
         else:
             self._set(key, status="succeeded", external_ref=result.get("id"), last_error=None)
             self.db.audit(event_id, "action_dispatched", f"{action.value} succeeded -> {result.get('id')}",
@@ -100,6 +106,11 @@ class Outbox:
     def process_due(self, now: datetime | None = None) -> list[dict[str, Any]]:
         """Worker loop tick: dispatch everything pending/uncertain whose time has come."""
         now = now or self.clock()
+        # Rows left in_flight by a crash mid-dispatch: after a grace period, treat them as uncertain outcomes.
+        stale_cutoff = iso(now - timedelta(seconds=IN_FLIGHT_GRACE_SECONDS))
+        for r in self.db.all("SELECT idempotency_key, event_id FROM actions WHERE status = 'in_flight' AND updated_at <= ?", (stale_cutoff,)):
+            self._set(r["idempotency_key"], status="uncertain", next_attempt_at=iso(now))
+            self.db.audit(r["event_id"], "action_uncertain", "found in_flight past the grace period (worker crashed?); will reconcile", {"idempotency_key": r["idempotency_key"]})
         due = self.db.all(
             "SELECT idempotency_key FROM actions WHERE status IN ('pending','uncertain') AND (next_attempt_at IS NULL OR next_attempt_at <= ?) ORDER BY created_at",
             (iso(now),),
@@ -166,10 +177,10 @@ class Outbox:
     def _dead(self, key: str, event_id: str, error: str) -> None:
         self._set(key, status="dead", last_error=error)
         self.db.audit(event_id, "action_dead", f"moved to dead-letter: {error}", {"idempotency_key": key})
-        row = self.db.one("SELECT decision_id FROM actions WHERE idempotency_key = ?", (key,))
+        row = self.db.one("SELECT decision_id, type FROM actions WHERE idempotency_key = ?", (key,))
         self.db.exec(
             "INSERT INTO review_queue(decision_id, event_id, proposed_action, reason, status, created_at) VALUES (?,?,?,?,?,?)",
-            (row["decision_id"], event_id, key.split(":", 1)[1], f"dead-letter: {error}", "open", iso(self.clock())),
+            (row["decision_id"], event_id, row["type"], f"dead-letter: {error}", "open", iso(self.clock())),
         )
 
 

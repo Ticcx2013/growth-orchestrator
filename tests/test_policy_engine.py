@@ -99,3 +99,24 @@ def test_end_to_end_mixed_reply_suppresses_and_reviews_without_irreversible_acti
     assert out["action"] == Action.SUPPRESS_CONTACT.value and out["requires_review"]
     assert rt.crm.records_of("deal") == [] and rt.crm.records_of("contact") == []
     assert rt.db.one("SELECT status FROM contacts WHERE id='c_hugo'")["status"] == "suppressed"
+
+
+def test_compliance_suppression_ignores_the_kill_switch(rt):
+    policy = rt.policies.load().model_copy(deep=True)
+    policy.automation[Action.SUPPRESS_CONTACT] = "off"
+    rt.policies.replace(policy)
+    out = reply(rt, "c_lucia", OPTOUT_ES)
+    assert out["action"] == Action.SUPPRESS_CONTACT.value and out["automated"]
+    assert rt.db.one("SELECT status FROM contacts WHERE id='c_lucia'")["status"] == "suppressed"
+
+
+def test_model_unsubscribe_intent_below_threshold_still_suppresses(rt):
+    d = _decide(rt, "c_lucia", "texto que el regex no atrapa", _ai(Intent.UNSUBSCRIBE, 0.78, flags=[RiskFlag.UNSUBSCRIBE_REQUEST]))
+    assert d.action == Action.SUPPRESS_CONTACT and d.automated and d.requires_review
+
+
+def test_date_times_from_the_model_are_normalised():
+    from growth_orchestrator.ai.interpreter import normalise
+    interp = ReplyInterpretation(intent=Intent.OUT_OF_OFFICE, confidence=0.9, language="es", evidence=["x"],
+                                 extracted=ExtractedFacts(return_date="2026-10-14T00:00:00"), risk_flags=[], summary="s")
+    assert normalise(interp).extracted.return_date == "2026-10-14"

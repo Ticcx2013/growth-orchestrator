@@ -27,7 +27,7 @@ Live runs on 2026-09-30 against the Anthropic API. Reports in `evals/results/`.
 | `claude-opus-5-5` (default) | **15/15** | 100% | 100% | 100% | 100% | **0** | 1,906 / 4,125 | 4.5 s |
 | `claude-sonnet-5-5` | **15/15** | 100% | 100% | 100% | 100% | **0** | 1,906 / 3,756 | 2.6 s |
 
-The system prompt (~900 tokens) is cached, so the uncached input per call is ~125 tokens and output ~200 tokens. Per interpretation that is well under one cent on either model; at 250 replies/day the model bill is a few dollars a month. Cost is not a factor in the model choice; accuracy on the edge cases is.
+The system prompt (~900 tokens) is cached, so the uncached input per call is ~125 tokens and output ~250–275 tokens including the model's reasoning. Per interpretation that is well under one cent on either model; at 250 replies/day the model bill is a few dollars a month. Cost is not a factor in the model choice; accuracy on the edge cases is.
 
 ### What the runs show
 
@@ -38,9 +38,9 @@ The system prompt (~900 tokens) is cached, so the uncached input per call is ~12
 - **The hard cases behaved.** "No gracias." was read as not interested (0.85 / 0.90), not as an opt-out, and went to nurture; the opt-out regex correctly did not fire. "Bora marcar?" was read as interested with the proposed time quoted verbatim. The long reply with two questions was read as interested at 0.75 by Opus, exactly at the gate, and 0.80 by Sonnet: a reminder that thresholds are tuned per intent from data, not chosen once.
 - **Model choice is a policy decision backed by this table**, and rerunning it is one command (`GO_MODEL=... make eval-live`). Opus is the default; Sonnet is a legitimate choice if latency matters more, and on this set it is indistinguishable.
 
-### An unplanned third run: the API was down
+### An unplanned third run: the model was unavailable
 
-The first live attempt hit an account usage limit and every model call failed with an HTTP 400. The report is kept as `evals/results/2026-09-30-opus-5-5-api-outage.md` because it documents the degradation behaviour with real data: **0 unsafe automations**, all 12 replies escalated to a human, and the three opt-out cases were still suppressed correctly by the rules. That is the behaviour a production incident should have, and it happened without anyone designing for that specific afternoon.
+The first live attempt was made with an API key whose monthly usage limit had been reached, so every model call failed with an HTTP 400. The report is kept as `evals/results/2026-09-30-opus-5-5-api-outage.md` because it documents the degradation behaviour with real data: **0 unsafe automations**, 9 of the 12 replies escalated to a human, and the three opt-out cases were still suppressed correctly by the rules without the model. That is the behaviour a production incident should have, and it happened without anyone designing for that specific afternoon.
 
 ## What the model is allowed to decide
 

@@ -22,7 +22,7 @@ Requirements: `make` and `curl`. Everything else, including Python 3.12, is inst
 make setup          # install dependencies
 make run            # API + console at http://localhost:8000
 make demo           # narrated CLI run of the 7 scenarios
-make test           # 77 tests for the critical business logic
+make test           # 96 tests for the critical business logic
 make eval           # AI evaluation suite (15 cases, ES/PT/EN)
 ```
 
@@ -97,7 +97,7 @@ flowchart TB
 
 | Requirement | Where |
 |---|---|
-| 1. Trigger / webhook | `api.py` `POST /events`, HMAC optional, 202 then background processing |
+| 1. Trigger / webhook | `api.py` `POST /events`, HMAC optional, 202 then background processing; the handler never waits for the model on the event loop |
 | 2. Persistent account/contact state | `db.py` schema; `accounts.state_version` + `state_updated_at` |
 | 3. Eligibility and next-best-action | `eligibility.py` (8 rules) and `decision.py` (policy engine) driven by `policy.yaml` |
 | 4. Meaningful LLM capability | `ai/interpreter.py`: interprets replies in ES/PT/EN, extracts referral, dates, size, current tool |
@@ -105,7 +105,7 @@ flowchart TB
 | 6. External action / mock integration | `integrations/crm.py`: `CRMClient` protocol, `MockCRM` with fault injection, `HubSpotCRM` stub |
 | 7. Idempotency | Event: `events.event_id` primary key. Action: `actions.idempotency_key = event_id:action`. CRM: key lookup before create |
 | 8. Realistic failure / retry | `outbox.py`: timeout **after** commit → `uncertain` → reconcile by key → complete dependent writes; 429 → backoff; permanent → dead-letter + human |
-| 9. Automated tests | `tests/` (77): idempotency, eligibility, compliance, policy gates, validation, retries, ordering, freshness, HTTP contract |
+| 9. Automated tests | `tests/` (96): idempotency, eligibility, compliance, policy gates, validation, retries, ordering, freshness, HTTP contract |
 | 10. AI evaluation suite | `evals/cases.yaml` (15 cases) + `evals/run_eval.py`; results in `evals/results/` |
 
 Demo coverage: successful flow (1), duplicate event (2), failure and retry (3), unsafe AI (4), ambiguous AI (5), plus out-of-order events (6) and stale local state (7).
@@ -129,7 +129,7 @@ The model does exactly one job: **read a reply and describe it** as a validated 
 
 **How the output is validated.** The API enforces the schema. Our validators then check that every `evidence` quote appears verbatim in the reply, that a referral email or company size appears in the text, that dates parse and are in the future, and that intent and flags are consistent. One repair round with the errors fed back; a second failure routes to a human. In more than 60 live calls the repair path was never needed.
 
-**Ambiguity and low confidence.** `mixed` and `unclear` are never automated. Confidence below `0.75` (or `0.85` for unsubscribe/referral) escalates with the proposed action attached, so the reviewer clicks rather than thinks from scratch. We do not treat the model's confidence as calibrated probability; it is one of three inputs (intent, grounded evidence, account state) and never the only gate. Thresholds come from the evaluation suite, not intuition.
+**Ambiguity and low confidence.** `mixed` and `unclear` are never automated. A request to stop that only the model saw is suppressed at any confidence, and a human confirms the rest. Confidence below `0.75` (or `0.85` for unsubscribe/referral) escalates with the proposed action attached, so the reviewer clicks rather than thinks from scratch. We do not treat the model's confidence as calibrated probability; it is one of three inputs (intent, grounded evidence, account state) and never the only gate. Thresholds come from the evaluation suite, not intuition.
 
 **Prompt injection.** The reply is data, not instruction. Two independent layers: regex heuristics in `compliance.py` and the model's own `prompt_injection` flag. Either one blocks automation.
 
@@ -142,10 +142,10 @@ The model does exactly one job: **read a reply and describe it** as a validated 
 - **Duplicates.** The provider's `event_id` is the primary key of `events`. A duplicate is counted, audited and dropped before any logic runs.
 - **Out-of-order.** Account state carries `state_version` and `state_updated_at`. A CRM update older than the current state is ignored. A reply that predates a state change is evaluated against the **current** state, which is the safe direction (a prospect that became a customer an hour ago must not get a sales handoff).
 - **Uncertain outcomes.** A timeout after the CRM committed the write is the dangerous failure. The outbox marks the action `uncertain`, and on retry first asks the CRM whether a record with that idempotency key exists. Dependent writes (the AE task after the deal) complete idempotently. Result: exactly one deal, always.
-- **Rate limits.** 429 → exponential backoff (30s, 2m, 10m), `next_attempt_at` persisted, worker tick picks it up.
+- **Rate limits.** 429 → exponential backoff (30s, 2m, 10m), `next_attempt_at` persisted, worker tick picks it up. Same four-attempt cap as uncertain outcomes, then dead letter.
 - **Dead letters.** Four failed attempts or a permanent error → `dead` status and a review-queue item.
 - **Stale local state.** Before an irreversible action the orchestrator re-reads the account from the CRM. If it differs, local state is updated and the decision re-evaluated.
-- **Degradation.** If the model API is down, every reply escalates to a human, opt-outs are still suppressed by rule, and nothing irreversible happens. This was observed for real: see the outage run in `evals/results/`.
+- **Degradation.** If the model is unavailable, every reply escalates to a human, opt-outs are still suppressed by rule, and nothing irreversible happens. This was observed for real when an API key hit its usage limit: see the outage run in `evals/results/`.
 
 ---
 
@@ -173,7 +173,7 @@ The goal is incremental **AE-accepted pipeline**, not more messages. The plan is
 | Concern | Prototype | Production |
 |---|---|---|
 | Reliability | SQLite, in-process outbox, demo clock | Postgres; queue (SQS / Cloud Tasks) between ingest and process; per-account advisory lock; worker for the outbox; DLQ alerts |
-| Security | Optional HMAC on the webhook; secrets from env | HMAC required + replay window; secrets in a vault; minimal PII in prompts (name, company, reply only); retention policy for `ai_calls`; per-country legal review |
+| Security | Optional HMAC on the webhook; secrets from env; console API unauthenticated | HMAC required + replay window; SSO in front of the console and its API (policy edits and approvals are privileged); secrets in a vault; minimal PII in prompts (name, company, reply only); retention policy for `ai_calls`; per-country legal review |
 | Observability | Audit log per `event_id` | Traces keyed by `event_id` across services; metrics per intent, action and automation mode; alerts on DLQ depth, % routed to humans, model latency and validation-failure rate; weekly drift report against human sampling |
 | Scale | 50k companies/month ≈ 1,700/day ≈ 150–250 replies/day | Model cost is cents per day. The real bottlenecks are CRM rate limits and email deliverability (domains, warm-up), which the outbox and backoff already respect |
 | Build vs buy | Everything mocked | **Buy:** sending (Amplemarket/Outreach), enrichment (Clay), CRM (HubSpot). **Build:** this decision layer (policy, validation, audit). n8n is fine for connectors; the brain stays a tested service |
@@ -201,6 +201,6 @@ src/growth_orchestrator/
 policy.yaml         what the system may automate (editable)
 demo/               7 scenarios + narrated CLI
 evals/              cases, runner, results
-tests/              77 tests
+tests/              96 tests
 docs/               decisions, experiment, what-if, AI evaluation
 ```

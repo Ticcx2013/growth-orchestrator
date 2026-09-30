@@ -71,11 +71,12 @@ def decide_reply(
     ]
 
     # 1. Compliance first. A rule, not a model, decides that we stop contacting someone.
+    #    Automation modes do not apply here: an opt-out is a legal obligation, not a product choice.
     if compliance.opt_out:
         d = Decision(action=Action.SUPPRESS_CONTACT, automated=True,
                      reason=f"opt-out detected by rule ({compliance.opt_out_matches[0]}); compliance never depends on the model",
                      trace=trace, payload={"contact_id": contact["id"], "email": contact["email"], "reason": "opt_out_reply"})
-        d = _apply_mode(policy, d)
+        d.trace.append({"step": "automation_mode", "action": d.action.value, "mode": "compliance (always on)"})
         # If the AI also saw something else (a referral, interest), a human should look, but nothing else is automated.
         if ai and ai.interpretation and ai.interpretation.intent in (Intent.MIXED, Intent.REFERRAL, Intent.INTERESTED):
             d.requires_review = True
@@ -118,12 +119,16 @@ def decide_reply(
         return _escalate("model flagged prompt injection; no automatic action", trace)
     if RiskFlag.LEGAL_OR_COMPLAINT in interp.risk_flags:
         return _escalate("legal threat or complaint detected; humans handle this", trace)
-    if RiskFlag.UNSUBSCRIBE_REQUEST in interp.risk_flags and interp.intent != Intent.UNSUBSCRIBE:
-        # Model saw an opt-out the regex missed. Safer to suppress AND review than to keep going.
+    if RiskFlag.UNSUBSCRIBE_REQUEST in interp.risk_flags or interp.intent == Intent.UNSUBSCRIBE:
+        # The model saw an opt-out the regex missed (as the main intent or as a side signal). Whatever its
+        # confidence, the safe move is the same: stop contacting them now AND ask a human to confirm the rest.
+        # Suppressing is reversible in the CRM; a missed opt-out is a legal problem.
         d = Decision(action=Action.SUPPRESS_CONTACT, automated=True, requires_review=True,
-                     reason="model detected an unsubscribe request the rules missed: suppressing and asking a human to confirm the rest",
+                     reason=f"model detected an unsubscribe request the rules missed (intent '{interp.intent.value}', confidence {interp.confidence:.2f}): "
+                            "suppressing now and asking a human to confirm the rest",
                      trace=trace, payload={"contact_id": contact["id"], "email": contact["email"], "reason": "opt_out_reply_ai"})
-        return _apply_mode(policy, d)
+        d.trace.append({"step": "automation_mode", "action": d.action.value, "mode": "compliance (always on)"})
+        return d
 
     # 6. Ambiguity and confidence gates.
     if interp.intent in (Intent.MIXED, Intent.UNCLEAR):
@@ -139,34 +144,55 @@ def decide_reply(
 
     # 7. Deterministic mapping intent -> action, with the exceptions that need state.
     action = policy.intent_actions.get(interp.intent, Action.ESCALATE_TO_HUMAN)
-    payload: dict[str, Any] = {"contact_id": contact["id"], "account_id": account["id"], "summary": interp.summary}
 
     if interp.intent == Intent.PRICING_QUESTION and not in_icp(account, policy):
         return _escalate("pricing question from an account outside ICP: route to self-serve or a human, not to an AE",
-                         trace, proposed=Action.HANDOFF_TO_AE)
+                         trace, proposed=Action.HANDOFF_TO_AE, payload=payload_for(Action.HANDOFF_TO_AE, account, contact, interp, policy, reply_at))
 
+    if action == Action.CREATE_REFERRAL_CONTACT and not interp.extracted.referral_email:
+        return _escalate("referral without an email address in the reply: a human finds the contact", trace, proposed=action)
+
+    d = Decision(action=action, automated=True, reason=f"intent '{interp.intent.value}' (confidence {interp.confidence:.2f}) -> {action.value}",
+                 trace=trace, payload=payload_for(action, account, contact, interp, policy, reply_at))
+    return _apply_mode(policy, d)
+
+
+def payload_for(action: Action, account: dict, contact: dict, interp, policy: Policy, reply_at: datetime) -> dict[str, Any]:
+    """The outbox payload for an action, from state plus (optionally) the model's reading.
+    Used when deciding and again when a reviewer approves a proposed action, so both paths agree."""
+    ex = interp.extracted if interp else None
+    payload: dict[str, Any] = {"contact_id": contact["id"], "account_id": account["id"], "summary": interp.summary if interp else ""}
     if action == Action.HANDOFF_TO_AE:
-        payload.update({"owner_ae_id": account.get("owner_ae_id"), "proposed_meeting": interp.extracted.proposed_meeting,
-                        "notes": interp.summary})
+        payload.update({"owner_ae_id": account.get("owner_ae_id"), "proposed_meeting": ex.proposed_meeting if ex else None,
+                        "notes": interp.summary if interp else "approved by reviewer"})
     elif action == Action.WAIT_UNTIL:
-        raw = interp.extracted.return_date or interp.extracted.follow_up_date
-        until = date.fromisoformat(raw) if raw else reply_at.date() + timedelta(days=policy.defaults.wait_days_when_no_date)
+        raw = (ex.return_date or ex.follow_up_date) if ex else None
+        until = _iso_date(raw) if raw else None
+        if until is None:
+            until = reply_at.date() + timedelta(days=policy.defaults.wait_days_when_no_date)
         payload.update({"wait_until": until.isoformat(), "source": "stated" if raw else "default"})
     elif action == Action.CREATE_REFERRAL_CONTACT:
-        if not interp.extracted.referral_email:
-            return _escalate("referral without an email address in the reply: a human finds the contact", trace, proposed=action)
-        payload.update({"email": interp.extracted.referral_email, "name": interp.extracted.referral_name})
+        payload.update({"email": ex.referral_email if ex else None, "name": ex.referral_name if ex else None})
     elif action == Action.SUPPRESS_CONTACT:
         payload.update({"email": contact["email"], "reason": "unsubscribe_intent"})
     elif action == Action.NURTURE_LONG_TERM:
-        payload.update({"lifecycle": "nurture", "current_tool": interp.extracted.current_tool})
+        payload.update({"lifecycle": "nurture", "current_tool": ex.current_tool if ex else None})
+    elif action == Action.ENROLL_IN_SEQUENCE:
+        payload.update({"sequence": f"outbound-{(account.get('country') or 'mx').lower()}-v1"})
+    elif action == Action.NOTIFY_CSM:
+        payload.update({"csm_id": account.get("csm_id") or account.get("owner_ae_id")})
+    return payload
 
-    d = Decision(action=action, automated=True, reason=f"intent '{interp.intent.value}' (confidence {interp.confidence:.2f}) -> {action.value}",
-                 trace=trace, payload=payload)
-    return _apply_mode(policy, d)
+
+def _iso_date(raw: str) -> date | None:
+    try:
+        return date.fromisoformat(raw[:10])
+    except (ValueError, TypeError):
+        return None
 
 
 def decide_unsubscribed(contact: dict, policy: Policy) -> Decision:
-    d = Decision(action=Action.SUPPRESS_CONTACT, automated=True, reason="explicit unsubscribe event from the outreach tool",
-                 trace=[], payload={"contact_id": contact["id"], "email": contact["email"], "reason": "unsubscribe_event"})
-    return _apply_mode(policy, d)
+    # Compliance: automation modes do not apply.
+    return Decision(action=Action.SUPPRESS_CONTACT, automated=True, reason="explicit unsubscribe event from the outreach tool",
+                    trace=[{"step": "automation_mode", "action": Action.SUPPRESS_CONTACT.value, "mode": "compliance (always on)"}],
+                    payload={"contact_id": contact["id"], "email": contact["email"], "reason": "unsubscribe_event"})
