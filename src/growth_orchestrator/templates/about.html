@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %} · How it works{% endblock %}
+{% block head %}
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', fontFamily: 'Inter' });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  .prose-doc h1 { font-size: 1.1rem; font-weight: 600; margin: 1rem 0 .5rem; }
+  .prose-doc h2 { font-size: 1rem; font-weight: 600; margin: 1rem 0 .4rem; }
+  .prose-doc h3 { font-size: .95rem; font-weight: 600; margin: .8rem 0 .3rem; }
+  .prose-doc p, .prose-doc li { font-size: .9rem; line-height: 1.55; color: #334155; }
+  .prose-doc ul { list-style: disc; padding-left: 1.2rem; margin: .3rem 0; }
+  .prose-doc ol { list-style: decimal; padding-left: 1.2rem; margin: .3rem 0; }
+  .prose-doc table { font-size: .85rem; border-collapse: collapse; margin: .5rem 0; }
+  .prose-doc th, .prose-doc td { border: 1px solid #e2e8f0; padding: .3rem .5rem; text-align: left; }
+  .prose-doc code { font-family: "JetBrains Mono", monospace; font-size: .8rem; background: #f1f5f9; padding: 0 .25rem; border-radius: 3px; }
+  .prose-doc strong { color: #0f172a; }
+</style>
+{% endblock %}
+{% block content %}
+<div x-data="about()" x-init="load()" class="space-y-6">
+  <div>
+    <h1 class="text-lg font-semibold">How it works</h1>
+    <p class="text-sm text-slate-500">One vertical slice, built for judgment rather than volume: the model interprets, the rules decide, the outbox acts, the audit log remembers.</p>
+  </div>
+
+  <div class="card p-4">
+    <h2 class="font-medium mb-2">Architecture</h2>
+    <pre class="mermaid text-sm">
+flowchart LR
+  subgraph Sources
+    OUT[Outreach tool<br/>reply.received]
+    CRM_W[CRM webhook<br/>crm.account_updated]
+    ENR[Enrichment<br/>prospect.identified]
+  end
+  OUT --> WH
+  CRM_W --> WH
+  ENR --> WH
+  WH[/POST /events<br/>HMAC · 202 in &lt;100ms/] --> ING[Ingest<br/>event_id PK = idempotency]
+  ING -- duplicate --> DUP[(ignored, counted)]
+  ING --> ST[(State<br/>accounts · contacts · suppressions<br/>versioned, never rolls back)]
+  ST --> EL[Eligibility rules<br/>customer · opportunity · suppression<br/>cooldown · cap · ICP]
+  EL --> CO[Compliance rules<br/>opt-out ES/PT/EN · injection heuristics]
+  CO --> AI[Reply interpreter<br/>Claude · structured output<br/>evidence must be verbatim]
+  AI --> VAL{Validation<br/>schema · grounding · dates}
+  VAL -- fail --> REP[1 repair attempt]
+  REP --> VAL
+  VAL --> POL[Policy engine<br/>intent × confidence × state → action<br/>auto · assisted · off]
+  CO -- opt-out --> POL
+  POL -- irreversible? --> FR[Freshness check<br/>re-read CRM]
+  FR --> OB[(Outbox<br/>idempotency key per action)]
+  POL --> OB
+  POL -- ambiguous / low confidence --> HQ[(Human review queue)]
+  OB --> EXE[Dispatcher<br/>retry · backoff · reconcile]
+  EXE --> CRM[(CRM / outreach<br/>mock adapter)]
+  EXE -- dead --> HQ
+  ING & ST & EL & CO & AI & VAL & POL & FR & OB & EXE --> AUD[(Audit log<br/>stage · reason · versions)]
+  classDef store fill:#eef2ff,stroke:#6366f1,color:#1e1b4b;
+  classDef ai fill:#fdf2f8,stroke:#db2777,color:#500724;
+  classDef human fill:#fff7ed,stroke:#ea580c,color:#431407;
+  class ST,OB,AUD,DUP store; class AI,VAL,REP ai; class HQ human;
+    </pre>
+  </div>
+
+  <div class="grid grid-cols-12 gap-6">
+    <div class="col-span-12 lg:col-span-6 card p-4">
+      <h2 class="font-medium mb-2">What the AI may and may not decide</h2>
+      <table class="w-full text-sm">
+        <thead class="text-left text-xs uppercase tracking-wide text-slate-500"><tr><th class="py-1">Question</th><th class="py-1">Who answers</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr><td class="py-1.5">What does this reply mean? Which facts does it state?</td><td class="py-1.5 text-pink-700">Model (interprets)</td></tr>
+          <tr><td class="py-1.5">May we contact this account at all?</td><td class="py-1.5 text-violet-700">Rules (state + policy)</td></tr>
+          <tr><td class="py-1.5">Did they ask us to stop?</td><td class="py-1.5 text-violet-700">Rules first; model is a second opinion</td></tr>
+          <tr><td class="py-1.5">Which action follows from the intent?</td><td class="py-1.5 text-indigo-700">Policy table</td></tr>
+          <tr><td class="py-1.5">May that action run without a human?</td><td class="py-1.5 text-indigo-700">Policy mode + confidence gate</td></tr>
+          <tr><td class="py-1.5">Is this a duplicate? Is this event stale?</td><td class="py-1.5 text-violet-700">Rules (keys and versions)</td></tr>
+          <tr><td class="py-1.5">Is the CRM still in the state we think?</td><td class="py-1.5 text-sky-700">Freshness check (a read, not a guess)</td></tr>
+          <tr><td class="py-1.5">Anything ambiguous, contradictory, or below threshold</td><td class="py-1.5 text-orange-700">Human</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="col-span-12 lg:col-span-6 card p-4">
+      <h2 class="font-medium mb-2">AI evaluation (latest run)</h2>
+      <template x-if="!evalData">
+        <p class="text-sm text-slate-500">No results yet. Run <span class="mono">make eval</span>.</p>
+      </template>
+      <template x-if="evalData">
+        <div class="text-sm space-y-2">
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="px-2 py-1 rounded bg-slate-900 text-white" x-text="evalData.summary.model + ' · ' + evalData.summary.mode"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="'passed ' + evalData.summary.passed + '/' + evalData.summary.cases"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="'intent ' + pct(evalData.summary.intent_accuracy)"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="'action ' + pct(evalData.summary.action_accuracy)"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="'grounded ' + pct(evalData.summary.grounded)"></span>
+            <span class="px-2 py-1 rounded" :class="evalData.summary.unsafe_automations === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="'unsafe automations ' + evalData.summary.unsafe_automations"></span>
+          </div>
+          <table class="w-full text-xs">
+            <thead class="text-left text-slate-500"><tr><th class="py-1">Case</th><th class="py-1">Intent</th><th class="py-1">Action</th><th class="py-1">Conf</th><th class="py-1"></th></tr></thead>
+            <tbody class="divide-y divide-slate-100">
+              <template x-for="c in evalData.cases" :key="c.id">
+                <tr>
+                  <td class="py-1 mono" x-text="c.id"></td>
+                  <td class="py-1" x-text="c.got.intent || '—'"></td>
+                  <td class="py-1 mono" x-text="c.got.action"></td>
+                  <td class="py-1" x-text="c.got.confidence ?? '—'"></td>
+                  <td class="py-1"><span class="px-1.5 py-0.5 rounded" :class="c.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="c.passed ? 'pass' : 'fail'"></span></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <p class="text-xs text-slate-500">Reports: <span x-text="reports.join(', ')"></span> in <span class="mono">evals/results/</span></p>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-6">
+    {% for name, label in [("DECISIONS.md", "Decision log"), ("EXPERIMENT.md", "Measurement plan"), ("WHAT_IF.md", "If you change an assumption")] %}
+    <details class="col-span-12 card p-4" {% if loop.first %}open{% endif %}>
+      <summary class="font-medium">{{ label }} <span class="mono text-xs text-slate-400 ml-2">docs/{{ name }}</span></summary>
+      <div class="prose-doc mt-2" x-html="md({{ docs[name] | tojson }})"></div>
+    </details>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function about() {
+  return {
+    evalData: null, reports: [],
+    async load() { const r = await api('/api/eval/results'); this.evalData = r.latest; this.reports = r.reports; },
+    pct(v) { return v == null ? '—' : Math.round(v * 100) + '%'; },
+    md(s) { return window.marked ? marked.parse(s || '') : s; },
+  };
+}
+</script>
+{% endblock %}

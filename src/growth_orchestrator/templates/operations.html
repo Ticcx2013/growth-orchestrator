@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %} · Operations{% endblock %}
+{% block content %}
+<div x-data="ops()" x-init="loadAll()" class="space-y-5">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-semibold">Operations</h1>
+      <p class="text-sm text-slate-500">What a RevOps person sees day to day: what needs a human, what the outbox is doing, and the audit trail behind every decision.</p>
+    </div>
+    <div class="flex items-center gap-2 text-sm">
+      <button @click="tick(60)" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50" title="Advance the demo clock 60s and run due retries">advance clock +60s &amp; run retries</button>
+      <button @click="loadAll()" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white">refresh</button>
+    </div>
+  </div>
+
+  <div class="flex gap-1 border-b border-slate-200 text-sm">
+    <template x-for="t in tabs" :key="t.key">
+      <button @click="tab = t.key" class="px-3 py-2 -mb-px border-b-2" :class="tab === t.key ? 'border-indigo-600 text-indigo-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-800'">
+        <span x-text="t.label"></span> <span class="ml-1 text-xs text-slate-400" x-text="count(t.key)"></span>
+      </button>
+    </template>
+  </div>
+
+  <!-- Review queue -->
+  <section x-show="tab === 'review'" x-cloak class="space-y-3">
+    <template x-if="review.length === 0"><div class="card p-6 text-slate-500 text-sm">Nothing waiting for a human. Run an ambiguous scenario in the control room.</div></template>
+    <template x-for="r in review" :key="r.id">
+      <div class="card p-4">
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-1 text-sm">
+            <div class="flex items-center gap-2">
+              <span class="mono text-xs text-slate-400" x-text="'#' + r.id"></span>
+              <span class="font-medium" x-text="r.contact_id + ' · ' + r.account_id"></span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700" x-text="r.status"></span>
+            </div>
+            <blockquote x-show="r.event_payload.text" class="italic text-slate-700 border-l-2 border-slate-300 pl-2">“<span x-text="r.event_payload.text"></span>”</blockquote>
+            <div class="text-slate-600" x-text="r.reason"></div>
+            <div class="text-xs text-slate-500">system decision: <span class="mono" x-text="r.decision_action"></span>
+              <template x-if="r.proposed_action"><span> · proposed: <span class="mono" x-text="r.proposed_action"></span></span></template>
+            </div>
+          </div>
+          <div x-show="r.status === 'open'" class="flex flex-col gap-2 shrink-0">
+            <button @click="approve(r)" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm" x-text="r.proposed_action ? 'Approve ' + r.proposed_action : 'Close: no action'"></button>
+            <button @click="reject(r)" class="px-3 py-1.5 rounded-lg border border-slate-300 text-sm">Reject</button>
+          </div>
+        </div>
+      </div>
+    </template>
+    <label class="text-xs text-slate-500 flex items-center gap-2"><input type="checkbox" x-model="showResolved" @change="loadReview()"> show resolved</label>
+  </section>
+
+  <!-- Outbox -->
+  <section x-show="tab === 'actions'" x-cloak class="card overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <tr><th class="p-3">Idempotency key</th><th class="p-3">Type</th><th class="p-3">Target</th><th class="p-3">Status</th><th class="p-3">Attempts</th><th class="p-3">Next attempt</th><th class="p-3">External ref</th><th class="p-3">Last error</th></tr>
+      </thead>
+      <tbody>
+        <template x-for="a in actions" :key="a.idempotency_key">
+          <tr class="border-t border-slate-100">
+            <td class="p-3 mono text-xs" x-text="a.idempotency_key"></td>
+            <td class="p-3 mono text-xs" x-text="a.type"></td>
+            <td class="p-3 text-xs" x-text="a.target_system"></td>
+            <td class="p-3"><span class="text-xs px-1.5 py-0.5 rounded" :class="statusClass(a.status)" x-text="a.status"></span></td>
+            <td class="p-3" x-text="a.attempts"></td>
+            <td class="p-3 text-xs text-slate-500" x-text="a.next_attempt_at ? a.next_attempt_at.slice(11, 19) + 'Z' : ''"></td>
+            <td class="p-3 mono text-xs" x-text="a.external_ref || ''"></td>
+            <td class="p-3 text-xs text-red-600" x-text="a.last_error || ''"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Audit -->
+  <section x-show="tab === 'audit'" x-cloak class="card p-2">
+    <template x-for="t in audit" :key="t.id">
+      <details class="px-2">
+        <summary class="flex items-start gap-2 py-1 rounded hover:bg-slate-50 text-sm">
+          <span class="mono text-[11px] text-slate-400 w-20 shrink-0" x-text="t.created_at.slice(11, 19)"></span>
+          <span class="mono text-[11px] text-slate-500 w-32 shrink-0 truncate" x-text="t.event_id || '—'"></span>
+          <span class="stage-pill mono text-[11px] px-1.5 py-0.5 rounded shrink-0 w-40 text-center" :class="'stage-' + t.stage" x-text="t.stage"></span>
+          <span x-text="t.message"></span>
+        </summary>
+        <pre x-show="t.data" class="mono text-[11px] bg-slate-50 border rounded-lg p-3 my-1 overflow-x-auto max-h-64" x-text="fmtJSON(t.data)"></pre>
+      </details>
+    </template>
+  </section>
+
+  <!-- AI calls -->
+  <section x-show="tab === 'ai'" x-cloak class="space-y-2">
+    <template x-for="c in aiCalls" :key="c.id">
+      <details class="card p-3">
+        <summary class="flex items-center gap-3 text-sm">
+          <span class="text-xs px-1.5 py-0.5 rounded" :class="c.valid ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="c.valid ? 'valid' : 'invalid'"></span>
+          <span class="mono text-xs text-slate-500" x-text="c.mode + ' · ' + c.model + ' · ' + c.prompt_version + ' · attempt ' + c.attempt"></span>
+          <span class="truncate italic text-slate-700">“<span x-text="c.input_text"></span>”</span>
+          <span class="ml-auto text-xs text-slate-500" x-text="(c.latency_ms ? c.latency_ms + ' ms · ' : '') + (c.input_tokens ? c.input_tokens + '/' + c.output_tokens + ' tok' : '')"></span>
+        </summary>
+        <pre class="mono text-[11px] bg-slate-50 border rounded-lg p-3 mt-2 overflow-x-auto" x-text="fmtJSON(c.parsed || c.validation_errors)"></pre>
+        <div x-show="c.validation_errors.length" class="text-xs text-red-600 mt-1" x-text="'validation: ' + c.validation_errors.join('; ')"></div>
+      </details>
+    </template>
+  </section>
+
+  <!-- State -->
+  <section x-show="tab === 'state'" x-cloak class="grid grid-cols-12 gap-4">
+    <div class="col-span-12 lg:col-span-5 card overflow-hidden">
+      <div class="p-3 text-xs uppercase tracking-wide text-slate-500 bg-slate-50">Accounts</div>
+      <table class="w-full text-xs">
+        <template x-for="a in state.accounts" :key="a.id">
+          <tr class="border-t border-slate-100">
+            <td class="p-2"><div class="font-medium" x-text="a.name"></div><div class="text-slate-500" x-text="a.country + ' · ' + a.employee_count + ' emp · v' + a.state_version"></div></td>
+            <td class="p-2 text-right space-x-1">
+              <span x-show="a.is_customer" class="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">customer</span>
+              <span x-show="a.has_open_opportunity" class="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700" x-text="'opp · ' + (a.owner_ae_id || '?')"></span>
+            </td>
+          </tr>
+        </template>
+      </table>
+    </div>
+    <div class="col-span-12 lg:col-span-7 card overflow-hidden">
+      <div class="p-3 text-xs uppercase tracking-wide text-slate-500 bg-slate-50">Contacts</div>
+      <table class="w-full text-xs">
+        <template x-for="c in state.contacts" :key="c.id">
+          <tr class="border-t border-slate-100">
+            <td class="p-2"><div class="font-medium" x-text="c.name"></div><div class="text-slate-500 mono" x-text="c.email"></div></td>
+            <td class="p-2 text-slate-500" x-text="c.account_id"></td>
+            <td class="p-2"><span class="px-1.5 py-0.5 rounded" :class="contactClass(c.status)" x-text="c.status"></span></td>
+            <td class="p-2 text-slate-500" x-text="c.sequence_status + (c.wait_until ? ' until ' + c.wait_until : '')"></td>
+          </tr>
+        </template>
+      </table>
+    </div>
+    <div class="col-span-12 card p-3">
+      <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Suppressions</div>
+      <div class="flex flex-wrap gap-2">
+        <template x-for="s in state.suppressions" :key="s.id"><span class="mono text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200" x-text="s.scope + ':' + s.key + ' (' + s.reason + ')'"></span></template>
+      </div>
+    </div>
+  </section>
+
+  <!-- CRM -->
+  <section x-show="tab === 'crm'" x-cloak class="card overflow-hidden">
+    <div class="p-3 text-xs text-slate-500 bg-slate-50">Mock CRM records. Every record carries the idempotency key that created it, which is how retries never duplicate.</div>
+    <table class="w-full text-xs">
+      <thead class="text-left text-slate-500"><tr><th class="p-2">Kind</th><th class="p-2">Id</th><th class="p-2">Idempotency key</th><th class="p-2">Data</th></tr></thead>
+      <template x-for="r in crm.records" :key="r.id">
+        <tr class="border-t border-slate-100 align-top">
+          <td class="p-2 font-medium" x-text="r.kind"></td><td class="p-2 mono" x-text="r.id"></td><td class="p-2 mono" x-text="r.idempotency_key"></td>
+          <td class="p-2 mono text-slate-500" x-text="JSON.stringify(Object.fromEntries(Object.entries(r).filter(([k]) => !['id','kind','idempotency_key'].includes(k))))"></td>
+        </tr>
+      </template>
+    </table>
+  </section>
+</div>
+
+<script>
+function ops() {
+  return {
+    tab: 'review', showResolved: false,
+    tabs: [{ key: 'review', label: 'Review queue' }, { key: 'actions', label: 'Outbox' }, { key: 'audit', label: 'Audit log' }, { key: 'ai', label: 'AI calls' }, { key: 'state', label: 'State' }, { key: 'crm', label: 'CRM' }],
+    review: [], actions: [], audit: [], aiCalls: [], state: { accounts: [], contacts: [], suppressions: [] }, crm: { records: [] },
+    count(k) { return { review: this.review.filter(r => r.status === 'open').length, actions: this.actions.length, audit: this.audit.length, ai: this.aiCalls.length, state: this.state.contacts.length, crm: this.crm.records.length }[k] || ''; },
+    async loadReview() { this.review = await api('/api/review?status=' + (this.showResolved ? 'all' : 'open')); },
+    async loadAll() {
+      [this.actions, this.audit, this.aiCalls, this.state, this.crm] = await Promise.all([api('/api/actions'), api('/api/audit'), api('/api/ai_calls'), api('/api/state'), api('/api/crm')]);
+      await this.loadReview();
+    },
+    async approve(r) { await api('/api/review/' + r.id + '/approve', { method: 'POST', body: JSON.stringify({ by: 'console' }) }); await this.loadAll(); },
+    async reject(r) { await api('/api/review/' + r.id + '/reject', { method: 'POST', body: JSON.stringify({ by: 'console' }) }); await this.loadAll(); },
+    async tick(s) { await api('/api/outbox/tick?advance_seconds=' + s, { method: 'POST' }); await this.loadAll(); },
+    statusClass(s) { return { succeeded: 'bg-emerald-100 text-emerald-700', uncertain: 'bg-amber-100 text-amber-700', pending: 'bg-sky-100 text-sky-700', in_flight: 'bg-sky-100 text-sky-700', failed: 'bg-red-100 text-red-700', dead: 'bg-red-100 text-red-700' }[s] || 'bg-slate-100'; },
+    contactClass(s) { return { active: 'bg-slate-100 text-slate-700', handed_off: 'bg-emerald-100 text-emerald-700', waiting: 'bg-sky-100 text-sky-700', suppressed: 'bg-red-100 text-red-700', nurture: 'bg-violet-100 text-violet-700' }[s] || ''; },
+  };
+}
+</script>
+{% endblock %}
