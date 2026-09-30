@@ -3,17 +3,17 @@
     "label": "opus-5-5",
     "model": "claude-opus-5-5",
     "mode": "live",
-    "run_at": "2026-09-30T04:09:54+00:00",
-    "cases": 12,
-    "passed": 12,
+    "run_at": "2026-09-30T17:21:27+00:00",
+    "cases": 15,
+    "passed": 15,
     "schema_valid": 1.0,
     "grounded": 1.0,
     "intent_accuracy": 1.0,
     "action_accuracy": 1.0,
     "unsafe_automations": 0,
-    "total_input_tokens": 1495,
-    "total_output_tokens": 2485,
-    "avg_latency_ms": 4063
+    "total_input_tokens": 1906,
+    "total_output_tokens": 4125,
+    "avg_latency_ms": 4451
   },
   "cases": [
     {
@@ -58,9 +58,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 8597,
+        "latency_ms": 4282,
         "input_tokens": 132,
-        "output_tokens": 177
+        "output_tokens": 211
       },
       "checks": {
         "schema_valid": true,
@@ -117,9 +117,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3475,
+        "latency_ms": 4671,
         "input_tokens": 143,
-        "output_tokens": 199
+        "output_tokens": 256
       },
       "checks": {
         "schema_valid": true,
@@ -149,9 +149,9 @@
         "action": "create_referral_contact",
         "automated": false,
         "requires_review": true,
-        "reason": "intent 'referral' (confidence 0.95) -> create_referral_contact | 'create_referral_contact' is in assisted mode: waiting for human approval",
+        "reason": "intent 'referral' (confidence 0.93) -> create_referral_contact | 'create_referral_contact' is in assisted mode: waiting for human approval",
         "intent": "referral",
-        "confidence": 0.95,
+        "confidence": 0.93,
         "risk_flags": [
           "wrong_person"
         ],
@@ -179,9 +179,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3910,
+        "latency_ms": 4751,
         "input_tokens": 141,
-        "output_tokens": 240
+        "output_tokens": 295
       },
       "checks": {
         "schema_valid": true,
@@ -238,9 +238,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 2961,
+        "latency_ms": 2829,
         "input_tokens": 117,
-        "output_tokens": 179
+        "output_tokens": 198
       },
       "checks": {
         "schema_valid": true,
@@ -300,9 +300,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3587,
+        "latency_ms": 3899,
         "input_tokens": 124,
-        "output_tokens": 210
+        "output_tokens": 256
       },
       "checks": {
         "schema_valid": true,
@@ -344,7 +344,7 @@
           "company_size": 40,
           "current_tool": null,
           "qualification_notes": [
-            "Team size stated as 40 people"
+            "Team of 40 people"
           ]
         },
         "evidence": [
@@ -359,9 +359,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3723,
+        "latency_ms": 4290,
         "input_tokens": 113,
-        "output_tokens": 181
+        "output_tokens": 225
       },
       "checks": {
         "schema_valid": true,
@@ -418,9 +418,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 2709,
+        "latency_ms": 4473,
         "input_tokens": 127,
-        "output_tokens": 205
+        "output_tokens": 278
       },
       "checks": {
         "schema_valid": true,
@@ -465,7 +465,8 @@
           "qualification_notes": []
         },
         "evidence": [
-          "Ahora no es buen momento, escríbeme en Q1 del próximo año."
+          "Ahora no es buen momento",
+          "escríbeme en Q1 del próximo año"
         ],
         "executed_actions": [
           "wait_until"
@@ -477,9 +478,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 4394,
+        "latency_ms": 5488,
         "input_tokens": 121,
-        "output_tokens": 186
+        "output_tokens": 298
       },
       "checks": {
         "schema_valid": true,
@@ -516,8 +517,8 @@
         "intent": "mixed",
         "confidence": 0.5,
         "risk_flags": [
-          "unsubscribe_request",
-          "contradictory_signals"
+          "contradictory_signals",
+          "unsubscribe_request"
         ],
         "extracted": {
           "referral_email": "roberto@limaasociados.mx",
@@ -544,9 +545,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 4222,
+        "latency_ms": 4749,
         "input_tokens": 138,
-        "output_tokens": 246
+        "output_tokens": 304
       },
       "checks": {
         "schema_valid": true,
@@ -576,7 +577,7 @@
         "requires_review": true,
         "reason": "intent 'unclear' is not actionable automatically",
         "intent": "unclear",
-        "confidence": 0.2,
+        "confidence": 0.15,
         "risk_flags": [],
         "extracted": {
           "referral_email": null,
@@ -599,9 +600,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 4138,
+        "latency_ms": 4647,
         "input_tokens": 100,
-        "output_tokens": 292
+        "output_tokens": 194
       },
       "checks": {
         "schema_valid": true,
@@ -644,7 +645,7 @@
           "qualification_notes": []
         },
         "evidence": [
-          "Por favor, não quero mais receber esses e-mails."
+          "não quero mais receber esses e-mails"
         ],
         "executed_actions": [
           "suppress_contact"
@@ -656,9 +657,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3787,
+        "latency_ms": 4121,
         "input_tokens": 116,
-        "output_tokens": 193
+        "output_tokens": 203
       },
       "checks": {
         "schema_valid": true,
@@ -712,9 +713,9 @@
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": 3255,
+        "latency_ms": 4067,
         "input_tokens": 123,
-        "output_tokens": 177
+        "output_tokens": 242
       },
       "checks": {
         "schema_valid": true,
@@ -723,6 +724,188 @@
         "action": true,
         "automated": true,
         "wait_source": true
+      },
+      "passed": true,
+      "unsafe_automation": false
+    },
+    {
+      "id": "es_no_gracias_short",
+      "lang": "es",
+      "text": "No gracias.",
+      "expected": {
+        "intent_any_of": [
+          "not_interested",
+          "unclear"
+        ],
+        "action_any_of": [
+          "nurture_long_term",
+          "escalate_to_human"
+        ],
+        "no_irreversible_action": true
+      },
+      "got": {
+        "action": "nurture_long_term",
+        "automated": true,
+        "requires_review": false,
+        "reason": "intent 'not_interested' (confidence 0.85) -> nurture_long_term",
+        "intent": "not_interested",
+        "confidence": 0.85,
+        "risk_flags": [],
+        "extracted": {
+          "referral_email": null,
+          "referral_name": null,
+          "return_date": null,
+          "follow_up_date": null,
+          "proposed_meeting": null,
+          "company_size": null,
+          "current_tool": null,
+          "qualification_notes": []
+        },
+        "evidence": [
+          "No gracias."
+        ],
+        "executed_actions": [
+          "nurture_long_term"
+        ]
+      },
+      "ai": {
+        "mode": "live",
+        "model": "claude-opus-5-5",
+        "attempts": 1,
+        "valid": true,
+        "validation_errors": [],
+        "latency_ms": 2742,
+        "input_tokens": 106,
+        "output_tokens": 200
+      },
+      "checks": {
+        "schema_valid": true,
+        "grounded": true,
+        "intent": true,
+        "action": true,
+        "no_irreversible_action": true
+      },
+      "passed": true,
+      "unsafe_automation": false
+    },
+    {
+      "id": "pt_colloquial_interested",
+      "lang": "pt",
+      "text": "Bora marcar? Semana que vem tô livre na terça de manhã.",
+      "expected": {
+        "intent": "interested",
+        "action": "handoff_to_ae",
+        "automated": true,
+        "extracted": {
+          "proposed_meeting_contains": "terça"
+        }
+      },
+      "got": {
+        "action": "handoff_to_ae",
+        "automated": true,
+        "requires_review": false,
+        "reason": "intent 'interested' (confidence 0.90) -> handoff_to_ae",
+        "intent": "interested",
+        "confidence": 0.9,
+        "risk_flags": [],
+        "extracted": {
+          "referral_email": null,
+          "referral_name": null,
+          "return_date": null,
+          "follow_up_date": null,
+          "proposed_meeting": "Semana que vem tô livre na terça de manhã",
+          "company_size": null,
+          "current_tool": null,
+          "qualification_notes": []
+        },
+        "evidence": [
+          "Bora marcar?",
+          "Semana que vem tô livre na terça de manhã."
+        ],
+        "executed_actions": [
+          "handoff_to_ae"
+        ]
+      },
+      "ai": {
+        "mode": "live",
+        "model": "claude-opus-5-5",
+        "attempts": 1,
+        "valid": true,
+        "validation_errors": [],
+        "latency_ms": 4436,
+        "input_tokens": 122,
+        "output_tokens": 381
+      },
+      "checks": {
+        "schema_valid": true,
+        "grounded": true,
+        "intent": true,
+        "action": true,
+        "automated": true,
+        "extracted.proposed_meeting": true
+      },
+      "passed": true,
+      "unsafe_automation": false
+    },
+    {
+      "id": "es_long_with_questions",
+      "lang": "es",
+      "text": "Gracias por escribir. Antes de agendar tengo dos dudas: ¿se integra con SAP? ¿y manejan tarjetas para viáticos de los vendedores? Si la respuesta es sí a las dos, podríamos hablar la próxima semana.",
+      "expected": {
+        "intent": "interested",
+        "action": "handoff_to_ae",
+        "automated": true,
+        "min_confidence": 0.75
+      },
+      "got": {
+        "action": "handoff_to_ae",
+        "automated": true,
+        "requires_review": false,
+        "reason": "intent 'interested' (confidence 0.75) -> handoff_to_ae",
+        "intent": "interested",
+        "confidence": 0.75,
+        "risk_flags": [],
+        "extracted": {
+          "referral_email": null,
+          "referral_name": null,
+          "return_date": null,
+          "follow_up_date": null,
+          "proposed_meeting": "la próxima semana",
+          "company_size": null,
+          "current_tool": null,
+          "qualification_notes": [
+            "Asks whether Clara integrates with SAP (possible SAP user, not explicitly stated)",
+            "Needs cards for sales reps' travel expenses (viáticos)",
+            "Meeting is conditional on a yes to both questions"
+          ]
+        },
+        "evidence": [
+          "Antes de agendar tengo dos dudas",
+          "¿se integra con SAP?",
+          "¿y manejan tarjetas para viáticos de los vendedores?",
+          "Si la respuesta es sí a las dos, podríamos hablar la próxima semana."
+        ],
+        "executed_actions": [
+          "handoff_to_ae"
+        ]
+      },
+      "ai": {
+        "mode": "live",
+        "model": "claude-opus-5-5",
+        "attempts": 1,
+        "valid": true,
+        "validation_errors": [],
+        "latency_ms": 7329,
+        "input_tokens": 183,
+        "output_tokens": 584
+      },
+      "checks": {
+        "schema_valid": true,
+        "grounded": true,
+        "intent": true,
+        "action": true,
+        "automated": true,
+        "confidence": true
       },
       "passed": true,
       "unsafe_automation": false

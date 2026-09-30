@@ -704,3 +704,31 @@ window.GLOSSARY = {
   };
   Object.assign(I18N.en, extra.en); Object.assign(I18N.es, extra.es);
 })();
+
+(function () {
+  const more = {
+    en: {
+      "try.title": "Or write your own reply", "try.hint": "Type anything a prospect might answer, in Spanish, Portuguese or English, and watch the pipeline handle it.",
+      "try.contact": "Who is replying", "try.button": "Run it", "try.placeholder": "e.g. Ya usamos Clara, ¿por qué me escriben?",
+      "scenario.custom.title": "Your own reply", "scenario.custom.summary": "",
+      "kind.custom": "yours",
+      "compare.title": "Compared with the previous run of this scenario", "compare.same": "same outcome", "compare.now": "now", "compare.before": "before", "compare.policy": "policy version",
+      "ops.cost": "cost", "ops.cost_hint": "Cost per call at list price, excluding the cached system prompt (about 1,000 tokens read from cache for a fraction of a cent).",
+    },
+    es: {
+      "try.title": "O escribe tu propia respuesta", "try.hint": "Escribe lo que respondería un prospecto, en español, portugués o inglés, y mira cómo lo procesa el pipeline.",
+      "try.contact": "Quién responde", "try.button": "Correr", "try.placeholder": "p. ej. Ya usamos Clara, ¿por qué me escriben?",
+      "scenario.custom.title": "Tu propia respuesta", "scenario.custom.summary": "",
+      "kind.custom": "tuyo",
+      "compare.title": "Comparado con la corrida anterior de este escenario", "compare.same": "mismo resultado", "compare.now": "ahora", "compare.before": "antes", "compare.policy": "versión de política",
+      "ops.cost": "costo", "ops.cost_hint": "Costo por llamada a precio de lista, sin contar el prompt de sistema en caché (unos 1,000 tokens leídos de caché por una fracción de centavo).",
+    },
+    en_plain: { "try.title": "Or write your own reply", "try.hint": "Type anything a prospect might answer and watch what the assistant does with it.", "compare.policy": "rules version", "ops.cost": "cost" },
+    es_plain: { "try.title": "O escribe tu propia respuesta", "try.hint": "Escribe lo que respondería un prospecto y mira qué hace el asistente con eso.", "compare.policy": "versión de reglas", "ops.cost": "costo" },
+  };
+  for (const k in more) Object.assign(I18N[k], more[k]);
+  /* List prices per million tokens (input, output). Cache reads are cheaper and not counted here. */
+  window.PRICES = { "claude-opus-5-5": [4, 20], "claude-opus-5": [5, 25], "claude-sonnet-5-5": [2, 10], "claude-sonnet-5": [2, 10], "claude-haiku-4-5": [1, 5] };
+  window.callCost = (model, tin, tout) => { const p = PRICES[model]; if (!p || tin == null) return null; return (tin * p[0] + tout * p[1]) / 1e6; };
+  window.fmtCost = (c) => c == null ? "" : (c < 0.01 ? "$" + c.toFixed(4) : "$" + c.toFixed(3));
+})();

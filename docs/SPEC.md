@@ -21,7 +21,7 @@ Out of scope on purpose: AI personalization, multichannel, real sending, calenda
 ### M2 AI layer
 - Structured output enforced by the API, validated by our own grounding checks, one repair round, then human. → `ai/interpreter.py`, `tests/test_ai_validation.py`
 - Offline mode replays recorded real responses; tests and demo run without a key. → `ai/fixtures.json`
-- Evaluation suite of 10–12 cases across ES/PT/EN with per-case checks and a zero-unsafe-automation gate. → `evals/`
+- Evaluation suite of 12–15 cases across ES/PT/EN with per-case checks and a zero-unsafe-automation gate. → `evals/`
 - Live results committed for at least two models. → `evals/results/`
 
 ### M3 Reliability

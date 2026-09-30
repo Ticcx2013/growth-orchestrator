@@ -151,3 +151,20 @@ def _run_locked(rt: Runtime, key: str, spec: dict[str, Any], reset: bool) -> dic
     return {"key": key, "title": spec["title"], "summary": spec["summary"], "kind": spec["kind"], "steps": steps,
             "crm": _crm_snapshot(rt), "review_queue": rt.db.all("SELECT * FROM review_queue WHERE status='open' ORDER BY id"),
             "ai_mode": "offline" if rt.settings.offline else "live"}
+
+
+def run_custom(rt: Runtime, contact_id: str, text: str, reset: bool = False) -> dict[str, Any]:
+    """Free-text reply from the console: same pipeline, same trace shape as a scenario."""
+    with rt.lock:
+        if reset:
+            rt.clock.reset()
+            seed(rt.db, rt.crm, now=rt.clock())
+            rt.crm.faults.clear()
+        contact = rt.db.one("SELECT c.name, a.name AS account FROM contacts c JOIN accounts a ON a.id = c.account_id WHERE c.id = ?", (contact_id,))
+        ev = _ev(rt, EventType.REPLY_RECEIVED, {"contact_id": contact_id, "channel": "console", "text": text.strip()})
+        step = _run(rt, "", ev, "")
+        step["key"] = "custom.0"
+        step["crm"] = _crm_snapshot(rt)
+        return {"key": "custom", "title": "", "summary": (contact["name"] + " · " + contact["account"]) if contact else contact_id, "kind": "custom",
+                "steps": [step], "crm": _crm_snapshot(rt), "review_queue": rt.db.all("SELECT * FROM review_queue WHERE status='open' ORDER BY id"),
+                "ai_mode": "offline" if rt.settings.offline else "live"}

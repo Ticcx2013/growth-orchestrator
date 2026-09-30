@@ -23,7 +23,7 @@ make setup          # install dependencies
 make run            # API + console at http://localhost:8000
 make demo           # narrated CLI run of the 7 scenarios
 make test           # 77 tests for the critical business logic
-make eval           # AI evaluation suite (12 cases, ES/PT/EN)
+make eval           # AI evaluation suite (15 cases, ES/PT/EN)
 ```
 
 Without an `ANTHROPIC_API_KEY` the system runs **offline**: the interpreter replays recorded model responses (real outputs from `claude-opus-5-5`, stored in `src/growth_orchestrator/ai/fixtures.json`). With a key (`cp .env.example .env`) it calls the model live. `make eval-live` and `make record` run the suite against the API.
@@ -41,6 +41,20 @@ Without an `ANTHROPIC_API_KEY` the system runs **offline**: the interpreter repl
 Two switches in the header: **EN / ES** and **Technical / Plain words**. Technical shows the system vocabulary and the raw audit log; Plain words rewrites every stage, action and screen in language a salesperson can use ("hand to a salesperson", "the CRM saved but never answered"). The model also returns its one-line summary in both languages.
 
 `/docs` is the OpenAPI spec. The webhook is `POST /events` (add `?sync=true` to get the full trace back in the response).
+
+### Screenshots
+
+| Control room, technical mode | Same scenario in plain words (Spanish) |
+|---|---|
+| ![Control room](docs/screenshots/control-room.png) | ![Plain words](docs/screenshots/plain-words-es.png) |
+
+| Write your own reply | Flip a switch, run again, see what changed |
+|---|---|
+| ![Your own reply](docs/screenshots/your-own-reply.png) | ![Before and after](docs/screenshots/before-after.png) |
+
+| Review queue for a non-technical operator | Policy screen in plain words |
+|---|---|
+| ![Review queue](docs/screenshots/review-queue.png) | ![Policy](docs/screenshots/policy-es.png) |
 
 ---
 
@@ -92,7 +106,7 @@ flowchart TB
 | 7. Idempotency | Event: `events.event_id` primary key. Action: `actions.idempotency_key = event_id:action`. CRM: key lookup before create |
 | 8. Realistic failure / retry | `outbox.py`: timeout **after** commit → `uncertain` → reconcile by key → complete dependent writes; 429 → backoff; permanent → dead-letter + human |
 | 9. Automated tests | `tests/` (77): idempotency, eligibility, compliance, policy gates, validation, retries, ordering, freshness, HTTP contract |
-| 10. AI evaluation suite | `evals/cases.yaml` (12 cases) + `evals/run_eval.py`; results in `evals/results/` |
+| 10. AI evaluation suite | `evals/cases.yaml` (15 cases) + `evals/run_eval.py`; results in `evals/results/` |
 
 Demo coverage: successful flow (1), duplicate event (2), failure and retry (3), unsafe AI (4), ambiguous AI (5), plus out-of-order events (6) and stale local state (7).
 
@@ -113,7 +127,7 @@ The model does exactly one job: **read a reply and describe it** as a validated 
 | Is our view of the CRM still true? | A read, not a guess | Freshness check before irreversible actions. |
 | Anything mixed, unclear, contradictory, injected, or below threshold | **Human** | Precision over coverage. |
 
-**How the output is validated.** The API enforces the schema. Our validators then check that every `evidence` quote appears verbatim in the reply, that a referral email or company size appears in the text, that dates parse and are in the future, and that intent and flags are consistent. One repair round with the errors fed back; a second failure routes to a human. In 24 live cases the repair path was never needed.
+**How the output is validated.** The API enforces the schema. Our validators then check that every `evidence` quote appears verbatim in the reply, that a referral email or company size appears in the text, that dates parse and are in the future, and that intent and flags are consistent. One repair round with the errors fed back; a second failure routes to a human. In more than 60 live calls the repair path was never needed.
 
 **Ambiguity and low confidence.** `mixed` and `unclear` are never automated. Confidence below `0.75` (or `0.85` for unsubscribe/referral) escalates with the proposed action attached, so the reviewer clicks rather than thinks from scratch. We do not treat the model's confidence as calibrated probability; it is one of three inputs (intent, grounded evidence, account state) and never the only gate. Thresholds come from the evaluation suite, not intuition.
 
@@ -137,14 +151,14 @@ The model does exactly one job: **read a reply and describe it** as a validated 
 
 ## AI evaluation
 
-12 representative cases in Spanish, Portuguese and English covering every intent, a prompt injection, a mixed reply, an out-of-ICP pricing question, a bare "Ok", and out-of-office with and without a date. Each case runs the **whole** path and checks intent, final action, automation flag, extracted facts, rule hits, and that no irreversible action ran where a human was expected.
+15 representative cases in Spanish, Portuguese and English covering every intent, a prompt injection, a mixed reply, an out-of-ICP pricing question, a bare "Ok", a bare "No gracias", colloquial Portuguese, a long reply with two questions, and out-of-office with and without a date. Each case runs the **whole** path and checks intent, final action, automation flag, extracted facts, rule hits, and that no irreversible action ran where a human was expected.
 
 | Model | Passed | Intent | Action | Grounded | Unsafe automations | Avg latency |
 |---|---|---|---|---|---|---|
-| `claude-opus-5-5` (default) | **12/12** | 100% | 100% | 100% | **0** | 4.1 s |
-| `claude-sonnet-5-5` | 11/12 | 100% | 92% | 100% | **0** | 2.3 s |
+| `claude-opus-5-5` (default) | **15/15** | 100% | 100% | 100% | **0** | 4.5 s |
+| `claude-sonnet-5-5` | **15/15** | 100% | 100% | 100% | **0** | 2.6 s |
 
-Sonnet's one miss was not an error: on the out-of-office reply without a date it reported confidence 0.70, below the 0.75 gate, so the item went to a human. Less automation, same safety. Full method, per-case results and the outage run: [docs/AI_EVALUATION.md](docs/AI_EVALUATION.md).
+Both models passed all 15 cases in the run kept here. In an earlier 12-case run, Sonnet reported confidence 0.70 on the out-of-office reply without a date, just under the 0.75 gate, and that item went to a human; on the re-run it scored 0.85 and passed. Same reply, different confidence on different days. That variance is the argument for gates and human sampling rather than for trusting a single number, and it is why the earlier report is kept in `evals/results/` too. Full method, per-case results and the outage run: [docs/AI_EVALUATION.md](docs/AI_EVALUATION.md).
 
 ---
 

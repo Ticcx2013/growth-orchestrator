@@ -26,7 +26,7 @@ from .runtime import Runtime, build_runtime
 from .seed import seed
 
 sys.path.insert(0, str(ROOT))
-from demo.scenarios import SCENARIOS, run_scenario  # noqa: E402
+from demo.scenarios import SCENARIOS, run_custom, run_scenario  # noqa: E402
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -201,6 +201,18 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
         if key not in SCENARIOS:
             raise HTTPException(404, "unknown scenario")
         return run_scenario(rt, key, reset=reset)
+
+    @app.post("/api/demo/try")
+    def try_reply(body: dict[str, Any]):
+        text = (body.get("text") or "").strip()
+        contact_id = body.get("contact_id") or "c_lucia"
+        if not text:
+            raise HTTPException(422, "text is required")
+        if len(text) > 2000:
+            raise HTTPException(422, "text too long")
+        if not rt.db.one("SELECT 1 FROM contacts WHERE id = ?", (contact_id,)):
+            raise HTTPException(404, "unknown contact")
+        return run_custom(rt, contact_id, text, reset=bool(body.get("reset", False)))
 
     @app.post("/api/demo/reset")
     def reset():

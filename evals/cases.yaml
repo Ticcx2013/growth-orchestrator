@@ -131,3 +131,34 @@ cases:
       action: wait_until
       automated: true
       wait_source: default
+
+  # --- harder cases: short, colloquial, long with questions ---
+  - id: es_no_gracias_short
+    lang: es
+    contact_id: c_lucia
+    text: "No gracias."
+    expect:
+      intent_any_of: [not_interested, unclear]
+      action_any_of: [nurture_long_term, escalate_to_human]
+      no_irreversible_action: true
+
+  - id: pt_colloquial_interested
+    lang: pt
+    contact_id: c_ana
+    text: "Bora marcar? Semana que vem tô livre na terça de manhã."
+    expect:
+      intent: interested
+      action: handoff_to_ae
+      automated: true
+      extracted:
+        proposed_meeting_contains: "terça"
+
+  - id: es_long_with_questions
+    lang: es
+    contact_id: c_camilo
+    text: "Gracias por escribir. Antes de agendar tengo dos dudas: ¿se integra con SAP? ¿y manejan tarjetas para viáticos de los vendedores? Si la respuesta es sí a las dos, podríamos hablar la próxima semana."
+    expect:
+      intent: interested
+      action: handoff_to_ae
+      automated: true
+      min_confidence: 0.75

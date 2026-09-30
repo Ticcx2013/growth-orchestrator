@@ -16,13 +16,24 @@
               :class="current && current.key === s.key ? 'ring-2 ring-indigo-500 border-indigo-300' : ''">
         <div class="flex items-center gap-2">
           <span class="text-xs px-1.5 py-0.5 rounded"
-                :class="{ success: 'bg-emerald-100 text-emerald-700', reliability: 'bg-sky-100 text-sky-700', ai: 'bg-pink-100 text-pink-700' }[s.kind]"
+                :class="{ success: 'bg-emerald-100 text-emerald-700', reliability: 'bg-sky-100 text-sky-700', ai: 'bg-pink-100 text-pink-700', custom: 'bg-indigo-100 text-indigo-700' }[s.kind]"
                 x-text="t('kind.' + s.kind)"></span>
           <span class="font-medium" x-text="t('scenario.' + s.key + '.title')"></span>
         </div>
         <p class="text-sm text-slate-500 mt-1" x-text="t('scenario.' + s.key + '.summary')"></p>
       </button>
     </template>
+
+    <div class="card p-4 text-sm border-indigo-200 bg-indigo-50/40">
+      <p class="font-medium" x-text="t('try.title')"></p>
+      <p class="text-xs text-slate-500 mb-2" x-text="t('try.hint')"></p>
+      <label class="block text-xs text-slate-500 mb-1" x-text="t('try.contact')"></label>
+      <select x-model="tryContact" class="w-full border rounded-lg px-2 py-1.5 text-sm bg-white mb-2">
+        <template x-for="c in contacts" :key="c.id"><option :value="c.id" x-text="c.name + ' · ' + c.account"></option></template>
+      </select>
+      <textarea x-model="tryText" rows="3" :placeholder="t('try.placeholder')" class="w-full border rounded-lg px-3 py-2 text-sm bg-white"></textarea>
+      <button @click="tryIt()" :disabled="running || !tryText.trim()" class="mt-2 w-full px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm disabled:opacity-50" x-text="t('try.button')"></button>
+    </div>
 
     <div class="card p-4 text-sm mono-hide">
       <p class="font-medium mb-1" x-text="t('index.curl')"></p>
@@ -66,7 +77,24 @@
           <h2 class="text-lg font-semibold" x-text="t('scenario.' + current.key + '.title')"></h2>
           <span class="text-xs text-slate-500" x-text="t(current.ai_mode === 'live' ? 'badge.live' : 'badge.offline')"></span>
         </div>
-        <p class="text-sm text-slate-600" x-text="t('scenario.' + current.key + '.summary')"></p>
+        <p class="text-sm text-slate-600" x-text="current.key === 'custom' ? current.summary : t('scenario.' + current.key + '.summary')"></p>
+
+        <template x-if="comparison">
+          <div class="rounded-xl border px-4 py-3 text-sm" :class="comparison.changed ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'">
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1" x-text="t('compare.title')"></div>
+            <template x-if="!comparison.changed"><div x-text="t('compare.same') + ' · ' + t('compare.policy') + ' ' + comparison.before.policy_version + ' → ' + comparison.now.policy_version"></div></template>
+            <template x-if="comparison.changed">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-slate-500" x-text="t('compare.before') + ':'"></span>
+                <span class="px-2 py-0.5 rounded bg-white border" x-text="outcomeWords(comparison.before)"></span>
+                <span class="text-slate-400">→</span>
+                <span class="text-slate-500" x-text="t('compare.now') + ':'"></span>
+                <span class="px-2 py-0.5 rounded bg-slate-900 text-white" x-text="outcomeWords(comparison.now)"></span>
+                <span class="text-xs text-slate-500" x-text="'(' + t('compare.policy') + ' ' + comparison.before.policy_version + ' → ' + comparison.now.policy_version + ')'"></span>
+              </div>
+            </template>
+          </div>
+        </template>
 
         <template x-for="(step, i) in current.steps" :key="i">
           <div class="card p-4 space-y-3">
@@ -162,11 +190,33 @@ function controlRoom() {
   return {
     faultWords(list) { const W = FAULT_WORDS[window.prefs.lang] || FAULT_WORDS.en; return list.map(f => isPlain() ? (W[f.fault] || f.fault) : f.fault).join(', '); },
     scenarios: {{ scenarios | tojson }},
-    current: null, running: false,
+    current: null, running: false, contacts: [], tryContact: 'c_lucia', tryText: '', lastByKey: {}, comparison: null,
     pipeline: [{ key: 'event' }, { key: 'state' }, { key: 'rules' }, { key: 'decision' }, { key: 'action' }, { key: 'audit' }],
-    init() {
+    async init() {
+      const st = await api('/api/state');
+      const names = Object.fromEntries(st.accounts.map(a => [a.id, a.name]));
+      this.contacts = st.contacts.filter(c => c.status !== 'suppressed').map(c => ({ id: c.id, name: c.name, account: names[c.account_id] || c.account_id }));
       const key = new URLSearchParams(location.search).get('run');
       if (key && this.scenarios.some(s => s.key === key)) this.run(key);
+    },
+    outcome(res) {
+      const last = res.steps[res.steps.length - 1].result || {};
+      const first = res.steps[0].result || {};
+      const r = last.action ? last : first;
+      return { action: r.action, automated: r.automated, requires_review: r.requires_review, policy_version: r.policy_version };
+    },
+    outcomeWords(o) { return tAction(o.action) + ' · ' + t(o.automated ? 'result.automated' : 'result.not_automated') + (o.requires_review ? ' · ' + t('result.review') : ''); },
+    remember(res) {
+      const now = this.outcome(res);
+      const before = this.lastByKey[res.key];
+      this.comparison = (before && res.key !== 'custom') ? { before, now, changed: before.action !== now.action || before.automated !== now.automated || before.requires_review !== now.requires_review } : null;
+      this.lastByKey[res.key] = now;
+    },
+    async tryIt() {
+      this.running = true;
+      try { this.current = await api('/api/demo/try', { method: 'POST', body: JSON.stringify({ contact_id: this.tryContact, text: this.tryText, reset: true }) }); this.remember(this.current); }
+      catch (e) { alert(e.message); }
+      finally { this.running = false; }
     },
     stepText(step, field) {
       const k = 'step.' + step.key + '.' + field;
@@ -199,11 +249,11 @@ function controlRoom() {
     },
     async run(key) {
       this.running = true;
-      try { this.current = await api('/api/demo/run/' + key, { method: 'POST' }); }
+      try { this.current = await api('/api/demo/run/' + key, { method: 'POST' }); this.remember(this.current); }
       catch (e) { alert(e.message); }
       finally { this.running = false; }
     },
-    async reset() { await api('/api/demo/reset', { method: 'POST' }); this.current = null; },
+    async reset() { await api('/api/demo/reset', { method: 'POST' }); this.current = null; this.comparison = null; this.lastByKey = {}; },
   };
 }
 </script>

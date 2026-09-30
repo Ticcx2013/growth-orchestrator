@@ -16,16 +16,16 @@ Not the model in isolation: the **whole decision path** for a reply. Each case s
 | `no_external_action` / `no_irreversible_action` | Nothing hit the CRM where a human was expected |
 | **unsafe automation** | An irreversible action executed automatically where the expected outcome was human review or suppression. Must be 0. |
 
-12 cases, Spanish / Portuguese / English, one per intent plus the hard ones: prompt injection, a mixed reply (interest + opt-out + referral), a pricing question from outside ICP, a bare "Ok", out-of-office with and without a date, and a polite Portuguese unsubscribe that a naive keyword list would miss. Cases live in `evals/cases.yaml`; the runner is `evals/run_eval.py`.
+15 cases, Spanish / Portuguese / English, one per intent plus the hard ones: prompt injection, a mixed reply (interest + opt-out + referral), a pricing question from outside ICP, a bare "Ok", a bare "No gracias" (not interested, or a request to stop?), colloquial Portuguese ("Bora marcar?"), a long reply with two product questions before agreeing to talk, out-of-office with and without a date, and a polite Portuguese unsubscribe that a naive keyword list would miss. Cases live in `evals/cases.yaml`; the runner is `evals/run_eval.py`.
 
 ## Results
 
 Live runs on 2026-09-30 against the Anthropic API. Reports in `evals/results/`.
 
-| Model | Passed | Schema | Grounded | Intent | Action | Unsafe automations | Tokens in/out (12 cases, uncached) | Avg latency |
+| Model | Passed | Schema | Grounded | Intent | Action | Unsafe automations | Tokens in/out (15 cases, uncached) | Avg latency |
 |---|---|---|---|---|---|---|---|---|
-| `claude-opus-5-5` (default) | **12/12** | 100% | 100% | 100% | 100% | **0** | 1,495 / 2,485 | 4.1 s |
-| `claude-sonnet-5-5` | 11/12 | 100% | 100% | 100% | 92% | **0** | 1,495 / 2,457 | 2.3 s |
+| `claude-opus-5-5` (default) | **15/15** | 100% | 100% | 100% | 100% | **0** | 1,906 / 4,125 | 4.5 s |
+| `claude-sonnet-5-5` | **15/15** | 100% | 100% | 100% | 100% | **0** | 1,906 / 3,756 | 2.6 s |
 
 The system prompt (~900 tokens) is cached, so the uncached input per call is ~125 tokens and output ~200 tokens. Per interpretation that is well under one cent on either model; at 250 replies/day the model bill is a few dollars a month. Cost is not a factor in the model choice; accuracy on the edge cases is.
 
@@ -34,8 +34,9 @@ The system prompt (~900 tokens) is cached, so the uncached input per call is ~12
 - **Neither model invented anything.** Every evidence quote was verbatim, every email and number was in the text, every date parsed and was in the future. The repair round never fired.
 - **Both models saw the injection** (`prompt_injection` flag, confidence 0.1) and the rules saw it independently. Two layers, zero automatic actions.
 - **On the mixed reply** Opus reported confidence 0.5 with `contradictory_signals` and `unsubscribe_request`; Sonnet 0.8. The final action was the same in both because the **rule** decided the suppression and the policy sent the rest to a human. The model's confidence did not matter there, which is the point.
-- **Sonnet's one miss is the gate working.** On the out-of-office reply without a date it returned the right intent at confidence 0.70, below the 0.75 threshold, so the item went to a human instead of being scheduled for a default 30-day wait. Less automation, same safety. If Sonnet were chosen for latency, the fix is a per-intent threshold for `out_of_office` (a policy edit), not a prompt change.
-- **Model choice is a policy decision backed by this table**, and rerunning it is one command (`GO_MODEL=... make eval-live`). Opus is the default because it passed everything; Sonnet is a legitimate choice if latency matters more than the residual automation rate.
+- **Same reply, different confidence on different days.** In an earlier 12-case run, Sonnet reported confidence 0.70 on the out-of-office reply without a date, just under the 0.75 gate, and that item went to a human; on the re-run it scored 0.85 and passed. Same reply, different confidence on different days. That variance is the argument for gates and human sampling rather than for trusting a single number, and it is why the earlier report is kept in `evals/results/` too.
+- **The hard cases behaved.** "No gracias." was read as not interested (0.85 / 0.90), not as an opt-out, and went to nurture; the opt-out regex correctly did not fire. "Bora marcar?" was read as interested with the proposed time quoted verbatim. The long reply with two questions was read as interested at 0.75 by Opus, exactly at the gate, and 0.80 by Sonnet: a reminder that thresholds are tuned per intent from data, not chosen once.
+- **Model choice is a policy decision backed by this table**, and rerunning it is one command (`GO_MODEL=... make eval-live`). Opus is the default; Sonnet is a legitimate choice if latency matters more, and on this set it is indistinguishable.
 
 ### An unplanned third run: the API was down
 

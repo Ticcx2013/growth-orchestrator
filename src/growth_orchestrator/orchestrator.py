@@ -245,7 +245,7 @@ class Orchestrator:
                           "proposed_action": d.proposed_action.value if d.proposed_action else None})
 
         return {"status": "processed", "decision_id": decision_id, "action": d.action.value, "automated": d.automated,
-                "requires_review": d.requires_review, "reason": d.reason,
+                "requires_review": d.requires_review, "reason": d.reason, "policy_version": policy_version,
                 "action_status": action_row["status"] if action_row else None,
                 "external_ref": action_row["external_ref"] if action_row else None}
 

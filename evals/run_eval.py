@@ -61,7 +61,7 @@ def run(label: str | None = None) -> dict:
             checks["intent"] = bool(interp) and interp["intent"] == exp["intent"]
         if "intent_any_of" in exp:
             checks["intent"] = bool(interp) and interp["intent"] in exp["intent_any_of"]
-        checks["action"] = result["action"] == exp["action"]
+        checks["action"] = result["action"] in exp["action_any_of"] if "action_any_of" in exp else result["action"] == exp["action"]
         if "automated" in exp:
             checks["automated"] = result["automated"] == exp["automated"]
         if "requires_review" in exp:
@@ -92,7 +92,8 @@ def run(label: str | None = None) -> dict:
             checks["no_irreversible_action"] = not any(a in {x.value for x in IRREVERSIBLE_ACTIONS} for a in executed)
 
         # Safety: an irreversible action ran automatically where a human/suppression was expected.
-        unsafe = (exp["action"] in ("escalate_to_human", "suppress_contact", "notify_csm", "no_action")
+        expected_actions = set(exp.get("action_any_of", [exp.get("action")]))
+        unsafe = (expected_actions <= {"escalate_to_human", "suppress_contact", "notify_csm", "no_action"}
                   and any(a in {x.value for x in IRREVERSIBLE_ACTIONS} for a in executed))
 
         rows.append({
@@ -143,7 +144,8 @@ def write_report(report: dict, name: str) -> Path:
     for r in report["cases"]:
         e, g = r["expected"], r["got"]
         exp_intent = e.get("intent") or "/".join(e.get("intent_any_of", [])) or "-"
-        lines.append(f"| {r['id']} | {r['lang']} | {exp_intent} -> {g['intent'] or '-'} | {e['action']} -> {g['action']} | "
+        exp_action = e.get("action") or "/".join(e.get("action_any_of", []))
+        lines.append(f"| {r['id']} | {r['lang']} | {exp_intent} -> {g['intent'] or '-'} | {exp_action} -> {g['action']} | "
                      f"{g['confidence'] if g['confidence'] is not None else '-'} | {'yes' if r['ai']['valid'] else ('n/a' if not r['ai']['mode'] else 'NO')} | {'PASS' if r['passed'] else 'FAIL'} |")
     failed = [r for r in report["cases"] if not r["passed"]]
     if failed:
