@@ -2,8 +2,9 @@
 
 UV := $(shell command -v uv 2>/dev/null || echo $(HOME)/.local/bin/uv)
 
-setup:            ## Install uv (if missing) and all dependencies
+setup:            ## Install uv (if missing), Python 3.12 (if missing) and all dependencies
 	@command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+	$(UV) python install 3.12 --quiet || true
 	$(UV) sync
 	@echo "\nReady. Run 'make run' and open http://localhost:8000"
 

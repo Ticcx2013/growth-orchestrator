@@ -16,7 +16,7 @@ Built as the business case for Clara's **AI Growth Automation Engineer** role. O
 
 ## Run it
 
-Requirements: Python 3.12+ and `make`. Everything else is installed by `make setup` (it installs [uv](https://docs.astral.sh/uv/) if missing).
+Requirements: `make` and `curl`. Everything else, including Python 3.12, is installed by `make setup` through [uv](https://docs.astral.sh/uv/).
 
 ```bash
 make setup          # install dependencies
