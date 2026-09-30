@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %} · Glossary{% endblock %}
+{% block content %}
+<div x-data="glossary()" class="space-y-5">
+  <div class="flex items-end justify-between gap-6">
+    <div>
+      <h1 class="text-lg font-semibold" x-text="t('glossary.title')"></h1>
+      <p class="text-sm text-slate-500" x-text="t('glossary.subtitle')"></p>
+    </div>
+    <input type="search" x-model="q" :placeholder="t('glossary.search')" class="border rounded-lg px-3 py-2 text-sm w-72">
+  </div>
+
+  <template x-for="group in groups()" :key="group.cat">
+    <section x-show="group.terms.length">
+      <h2 class="text-xs uppercase tracking-wide text-slate-500 mb-2 mt-4" x-text="group.cat"></h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <template x-for="term in group.terms" :key="term[0]">
+          <div class="card p-4">
+            <h3 class="font-semibold" x-text="term[0]"></h3>
+            <p class="text-sm text-slate-700 mt-1"><span class="text-xs uppercase tracking-wide text-emerald-700 mr-1" x-show="!isPlain()" x-text="t('glossary.plain')"></span><span x-text="term[1]"></span></p>
+            <p class="text-sm text-slate-600 mt-2 mono-hide"><span class="text-xs uppercase tracking-wide text-indigo-700 mr-1" x-text="t('glossary.tech')"></span><span x-html="mono(term[2])"></span></p>
+          </div>
+        </template>
+      </div>
+    </section>
+  </template>
+  <p x-show="!groups().some(g => g.terms.length)" class="text-sm text-slate-500" x-text="t('glossary.none')"></p>
+</div>
+
+<script>
+function glossary() {
+  return {
+    q: '',
+    groups() {
+      const data = GLOSSARY[window.prefs.lang] || GLOSSARY.en;
+      const q = this.q.trim().toLowerCase();
+      return data.map(g => ({ cat: g.cat, terms: g.terms.filter(tm => !q || tm.join(' ').toLowerCase().includes(q)) }));
+    },
+    mono(s) { return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])).replace(/`([^`]+)`/g, '<code class="mono text-[12px] bg-slate-100 px-1 rounded">$1</code>'); },
+  };
+}
+</script>
+{% endblock %}

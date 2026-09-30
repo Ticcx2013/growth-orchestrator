@@ -23,13 +23,27 @@
 <script type="application/json" id="docs-json">{{ docs | tojson }}</script>
 <div x-data="about()" x-init="load()" class="space-y-6">
   <div>
-    <h1 class="text-lg font-semibold">How it works</h1>
-    <p class="text-sm text-slate-500">One vertical slice, built for judgment rather than volume: the model interprets, the rules decide, the outbox acts, the audit log remembers.</p>
+    <h1 class="text-lg font-semibold" x-text="t('about.title')"></h1>
+    <p class="text-sm text-slate-500" x-text="t('about.subtitle')"></p>
   </div>
 
-  <div class="card p-4">
-    <h2 class="font-medium mb-2">Architecture</h2>
-    <pre class="mermaid text-sm">
+  <!-- Plain: six steps -->
+  <div class="card p-4" x-show="isPlain()">
+    <h2 class="font-medium mb-3" x-text="t('about.plain_title')"></h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <template x-for="n in [1,2,3,4,5,6]" :key="n">
+        <div class="rounded-xl border border-slate-200 p-4" :class="n === 3 ? 'bg-pink-50 border-pink-200' : n === 4 ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50'">
+          <div class="text-xs font-semibold text-slate-400 mb-1" x-text="n"></div>
+          <h3 class="font-medium" x-text="t('about.s' + n + '.t')"></h3>
+          <p class="text-sm text-slate-600 mt-1" x-text="t('about.s' + n + '.d')"></p>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <details class="card p-4" :open="!isPlain()">
+    <summary class="font-medium" x-text="t('about.arch')"></summary>
+    <pre class="mermaid text-sm mt-3">
 flowchart TB
   subgraph sources[Sources]
     direction LR
@@ -59,69 +73,64 @@ flowchart TB
   classDef human fill:#fff7ed,stroke:#ea580c,color:#431407;
   class ST,OB,AUD,DUP store; class AI,VAL,REP ai; class HQ human;
     </pre>
-  </div>
+  </details>
 
   <div class="grid grid-cols-12 gap-6">
     <div class="col-span-12 lg:col-span-6 card p-4">
-      <h2 class="font-medium mb-2">What the AI may and may not decide</h2>
+      <h2 class="font-medium mb-2" x-text="t('about.boundaries')"></h2>
       <table class="w-full text-sm">
-        <thead class="text-left text-xs uppercase tracking-wide text-slate-500"><tr><th class="py-1">Question</th><th class="py-1">Who answers</th></tr></thead>
+        <thead class="text-left text-xs uppercase tracking-wide text-slate-500"><tr><th class="py-1" x-text="t('about.q')"></th><th class="py-1" x-text="t('about.who')"></th></tr></thead>
         <tbody class="divide-y divide-slate-100">
-          <tr><td class="py-1.5">What does this reply mean? Which facts does it state?</td><td class="py-1.5 text-pink-700">Model (interprets)</td></tr>
-          <tr><td class="py-1.5">May we contact this account at all?</td><td class="py-1.5 text-violet-700">Rules (state + policy)</td></tr>
-          <tr><td class="py-1.5">Did they ask us to stop?</td><td class="py-1.5 text-violet-700">Rules first; model is a second opinion</td></tr>
-          <tr><td class="py-1.5">Which action follows from the intent?</td><td class="py-1.5 text-indigo-700">Policy table</td></tr>
-          <tr><td class="py-1.5">May that action run without a human?</td><td class="py-1.5 text-indigo-700">Policy mode + confidence gate</td></tr>
-          <tr><td class="py-1.5">Is this a duplicate? Is this event stale?</td><td class="py-1.5 text-violet-700">Rules (keys and versions)</td></tr>
-          <tr><td class="py-1.5">Is the CRM still in the state we think?</td><td class="py-1.5 text-sky-700">Freshness check (a read, not a guess)</td></tr>
-          <tr><td class="py-1.5">Anything ambiguous, contradictory, or below threshold</td><td class="py-1.5 text-orange-700">Human</td></tr>
+          <template x-for="n in [1,2,3,4,5,6,7,8]" :key="n">
+            <tr><td class="py-1.5 pr-3" x-text="t('about.q' + n)"></td>
+                <td class="py-1.5" :class="{1: 'text-pink-700', 2: 'text-violet-700', 3: 'text-violet-700', 4: 'text-indigo-700', 5: 'text-indigo-700', 6: 'text-violet-700', 7: 'text-sky-700', 8: 'text-orange-700'}[n]" x-text="t('about.a' + n)"></td></tr>
+          </template>
         </tbody>
       </table>
     </div>
 
     <div class="col-span-12 lg:col-span-6 card p-4">
-      <h2 class="font-medium mb-2">AI evaluation (latest run)</h2>
-      <template x-if="!evalData">
-        <p class="text-sm text-slate-500">No results yet. Run <span class="mono">make eval</span>.</p>
-      </template>
+      <h2 class="font-medium mb-2" x-text="t('about.eval')"></h2>
+      <template x-if="!evalData"><p class="text-sm text-slate-500" x-text="t('about.eval_none')"></p></template>
       <template x-if="evalData">
         <div class="text-sm space-y-2">
           <div class="flex flex-wrap gap-2 text-xs">
-            <span class="px-2 py-1 rounded bg-slate-900 text-white" x-text="evalData.summary.model + ' · ' + evalData.summary.mode"></span>
-            <span class="px-2 py-1 rounded bg-slate-100" x-text="'passed ' + evalData.summary.passed + '/' + evalData.summary.cases"></span>
-            <span class="px-2 py-1 rounded bg-slate-100" x-text="'intent ' + pct(evalData.summary.intent_accuracy)"></span>
-            <span class="px-2 py-1 rounded bg-slate-100" x-text="'action ' + pct(evalData.summary.action_accuracy)"></span>
-            <span class="px-2 py-1 rounded bg-slate-100" x-text="'grounded ' + pct(evalData.summary.grounded)"></span>
-            <span class="px-2 py-1 rounded" :class="evalData.summary.unsafe_automations === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="'unsafe automations ' + evalData.summary.unsafe_automations"></span>
+            <span class="px-2 py-1 rounded bg-slate-900 text-white mono-hide" x-text="evalData.summary.model + ' · ' + evalData.summary.mode"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="t('about.passed') + ' ' + evalData.summary.passed + '/' + evalData.summary.cases"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="t('about.intent') + ' ' + pct(evalData.summary.intent_accuracy)"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="t('about.action') + ' ' + pct(evalData.summary.action_accuracy)"></span>
+            <span class="px-2 py-1 rounded bg-slate-100" x-text="t('about.grounded') + ' ' + pct(evalData.summary.grounded)"></span>
+            <span class="px-2 py-1 rounded" :class="evalData.summary.unsafe_automations === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="t('about.unsafe') + ': ' + evalData.summary.unsafe_automations"></span>
           </div>
           <table class="w-full text-xs">
-            <thead class="text-left text-slate-500"><tr><th class="py-1">Case</th><th class="py-1">Intent</th><th class="py-1">Action</th><th class="py-1">Conf</th><th class="py-1"></th></tr></thead>
+            <thead class="text-left text-slate-500"><tr><th class="py-1" x-text="t('about.case')"></th><th class="py-1" x-text="t('about.intent')"></th><th class="py-1" x-text="t('about.action')"></th><th class="py-1" x-text="t('about.conf')"></th><th class="py-1"></th></tr></thead>
             <tbody class="divide-y divide-slate-100">
               <template x-for="c in evalData.cases" :key="c.id">
                 <tr>
-                  <td class="py-1 mono" x-text="c.id"></td>
-                  <td class="py-1" x-text="c.got.intent || '—'"></td>
-                  <td class="py-1 mono" x-text="c.got.action"></td>
-                  <td class="py-1" x-text="c.got.confidence ?? '—'"></td>
-                  <td class="py-1"><span class="px-1.5 py-0.5 rounded" :class="c.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="c.passed ? 'pass' : 'fail'"></span></td>
+                  <td class="py-1" :class="!isPlain() && 'mono'" x-text="isPlain() ? c.lang.toUpperCase() + ' · “' + c.text.slice(0, 38) + (c.text.length > 38 ? '…' : '') + '”' : c.id"></td>
+                  <td class="py-1" x-text="c.got.intent ? tIntent(c.got.intent) : '—'"></td>
+                  <td class="py-1" :class="!isPlain() && 'mono'" x-text="tAction(c.got.action)"></td>
+                  <td class="py-1" x-text="c.got.confidence != null ? Math.round(c.got.confidence * 100) + '%' : '—'"></td>
+                  <td class="py-1"><span class="px-1.5 py-0.5 rounded" :class="c.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'" x-text="t(c.passed ? 'about.pass' : 'about.fail')"></span></td>
                 </tr>
               </template>
             </tbody>
           </table>
-          <p class="text-xs text-slate-500">Reports: <span x-text="reports.join(', ')"></span> in <span class="mono">evals/results/</span></p>
+          <p class="text-xs text-slate-500 mono-hide"><span x-text="t('about.reports') + ': '"></span><span x-text="reports.join(', ')"></span> · <span class="mono">evals/results/</span></p>
         </div>
       </template>
     </div>
   </div>
 
-  <div class="grid grid-cols-12 gap-6">
-    {% for name, label in [("DECISIONS.md", "Decision log"), ("EXPERIMENT.md", "Measurement plan"), ("WHAT_IF.md", "If you change an assumption")] %}
+  <div class="grid grid-cols-12 gap-6 mono-hide">
+    {% for name, key in [("DECISIONS.md", "about.docs.decisions"), ("EXPERIMENT.md", "about.docs.experiment"), ("WHAT_IF.md", "about.docs.whatif")] %}
     <details class="col-span-12 card p-4" {% if loop.first %}open{% endif %}>
-      <summary class="font-medium">{{ label }} <span class="mono text-xs text-slate-400 ml-2">docs/{{ name }}</span></summary>
+      <summary class="font-medium"><span x-text="t('{{ key }}')"></span> <span class="mono text-xs text-slate-400 ml-2">docs/{{ name }}</span></summary>
       <div class="prose-doc mt-2" x-html="md(docs['{{ name }}'])"></div>
     </details>
     {% endfor %}
   </div>
+  <p class="text-xs text-slate-400" x-text="t('about.tech_note')"></p>
 </div>
 
 <script>

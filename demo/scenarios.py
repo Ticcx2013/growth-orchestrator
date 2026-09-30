@@ -146,6 +146,8 @@ def _run_locked(rt: Runtime, key: str, spec: dict[str, Any], reset: bool) -> dic
         seed(rt.db, rt.crm, now=rt.clock())
         rt.crm.faults.clear()
     steps: list[Step] = spec["fn"](rt)
+    for i, step in enumerate(steps):
+        step["key"] = f"{key}.{i}"
     return {"key": key, "title": spec["title"], "summary": spec["summary"], "kind": spec["kind"], "steps": steps,
             "crm": _crm_snapshot(rt), "review_queue": rt.db.all("SELECT * FROM review_queue WHERE status='open' ORDER BY id"),
             "ai_mode": "offline" if rt.settings.offline else "live"}

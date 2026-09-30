@@ -36,6 +36,9 @@ Without an `ANTHROPIC_API_KEY` the system runs **offline**: the interpreter repl
 | **Policy** | The editable contract of what the system may automate. Change a switch, re-run a scenario, see the decision change. Presets for "shadow", "autonomous" and "kill switch". |
 | **Operations** | Human review queue (approve / reject), outbox with retries, audit log, AI calls, state, mock CRM. |
 | **How it works** | Architecture diagram, AI boundaries, latest evaluation results, decision log and measurement plan. |
+| **Glossary** | Every term used in the console, the docs and the deck, each with a plain-words and a technical definition. |
+
+Two switches in the header: **EN / ES** and **Technical / Plain words**. Technical shows the system vocabulary and the raw audit log; Plain words rewrites every stage, action and screen in language a salesperson can use ("hand to a salesperson", "the CRM saved but never answered"). The model also returns its one-line summary in both languages.
 
 `/docs` is the OpenAPI spec. The webhook is `POST /events` (add `?sync=true` to get the full trace back in the response).
 

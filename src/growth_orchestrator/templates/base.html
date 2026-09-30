@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Growth Orchestrator{% block title %}{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/static/i18n.js"></script>
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('prefs', window.prefs);
+      window.prefs = Alpine.store('prefs');
+      document.documentElement.lang = window.prefs.lang;
+    });
+  </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -28,25 +36,37 @@
     details > summary { list-style: none; cursor: pointer; }
     details > summary::-webkit-details-marker { display: none; }
     .card { background: white; border: 1px solid #e5e7eb; border-radius: 14px; }
+    .seg { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 9px; overflow: hidden; background: white; }
+    .seg button { padding: 5px 10px; font-size: 12px; color: #475569; }
+    .seg button.on { background: #0f172a; color: white; }
+    .plain-mode .mono-hide { display: none !important; }
   </style>
   {% block head %}{% endblock %}
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen" x-data :class="$store.prefs.mode === 'plain' ? 'plain-mode' : ''">
   <header class="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200">
-    <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-6">
-      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
-        <span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-600"></span> Growth Orchestrator
+    <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-5">
+      <a href="/" class="flex items-center gap-2 font-semibold tracking-tight whitespace-nowrap">
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-indigo-600"></span> <span x-text="t('brand')">Growth Orchestrator</span>
       </a>
       <nav class="flex items-center gap-1 text-sm">
-        {% for href, label, key in [("/", "Control room", "index"), ("/policy", "Policy", "policy"), ("/operations", "Operations", "operations"), ("/about", "How it works", "about")] %}
-        <a href="{{ href }}" class="px-3 py-1.5 rounded-lg {% if page == key %}bg-slate-900 text-white{% else %}text-slate-600 hover:bg-slate-100{% endif %}">{{ label }}</a>
+        {% for href, key, name in [("/", "index", "nav.control"), ("/policy", "policy", "nav.policy"), ("/operations", "operations", "nav.operations"), ("/about", "about", "nav.about"), ("/glossary", "glossary", "nav.glossary")] %}
+        <a href="{{ href }}" class="px-3 py-1.5 rounded-lg whitespace-nowrap {% if page == key %}bg-slate-900 text-white{% else %}text-slate-600 hover:bg-slate-100{% endif %}" x-text="t('{{ name }}')"></a>
         {% endfor %}
       </nav>
       <div class="ml-auto flex items-center gap-2 text-xs">
-        <span class="px-2 py-1 rounded-md border {% if ai_mode == 'live' %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-amber-300 bg-amber-50 text-amber-700{% endif %}">
-          AI {{ ai_mode }}{% if ai_mode == 'live' %} · {{ model }}{% else %} · recorded responses{% endif %}
+        <div class="seg" title="Language / Idioma">
+          <button @click="setLang('en'); document.documentElement.lang='en'" :class="$store.prefs.lang === 'en' && 'on'">EN</button>
+          <button @click="setLang('es'); document.documentElement.lang='es'" :class="$store.prefs.lang === 'es' && 'on'">ES</button>
+        </div>
+        <div class="seg">
+          <button @click="setMode('tech')" :class="$store.prefs.mode === 'tech' && 'on'" x-text="t('toggle.tech')"></button>
+          <button @click="setMode('plain')" :class="$store.prefs.mode === 'plain' && 'on'" x-text="t('toggle.plain')"></button>
+        </div>
+        <span class="px-2 py-1 rounded-md border whitespace-nowrap {% if ai_mode == 'live' %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-amber-300 bg-amber-50 text-amber-700{% endif %}">
+          <span x-text="t('{{ 'badge.live' if ai_mode == 'live' else 'badge.offline' }}')"></span>{% if ai_mode == 'live' %}<span class="mono-hide"> · {{ model }}</span>{% endif %}
         </span>
-        <a href="/docs" class="px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50">API docs</a>
+        <a href="/docs" class="px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-50 mono-hide" x-text="t('nav.api')"></a>
       </div>
     </div>
   </header>

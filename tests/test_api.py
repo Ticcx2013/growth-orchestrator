@@ -81,7 +81,7 @@ def test_review_approval_executes_the_proposed_action(client, rt):
 
 
 def test_console_pages_render(client):
-    for path in ("/", "/policy", "/operations", "/about"):
+    for path in ("/", "/policy", "/operations", "/about", "/glossary", "/static/i18n.js"):
         assert client.get(path).status_code == 200
 
 

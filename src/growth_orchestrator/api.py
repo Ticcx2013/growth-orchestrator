@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
@@ -35,6 +36,7 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
     app = FastAPI(title="Growth Orchestrator", version="0.1.0",
                   description="event -> state -> decision -> AI/rules -> action -> audit")
     app.state.rt = rt
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
     # Seed on first boot so the console has something to show.
     if rt.db.one("SELECT COUNT(*) AS n FROM accounts")["n"] == 0:
@@ -244,6 +246,10 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
     @app.get("/operations", response_class=HTMLResponse)
     def ui_operations(request: Request):
         return page(request, "operations")
+
+    @app.get("/glossary", response_class=HTMLResponse)
+    def ui_glossary(request: Request):
+        return page(request, "glossary")
 
     @app.get("/about", response_class=HTMLResponse)
     def ui_about(request: Request):

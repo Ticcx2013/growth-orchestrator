@@ -1,6 +1,6 @@
 """Prompt for the reply interpreter. Versioned: every AI call records which version produced it."""
 
-PROMPT_VERSION = "reply-interpreter-v1"
+PROMPT_VERSION = "reply-interpreter-v2"
 
 SYSTEM_PROMPT = """You interpret replies that prospects send to an outbound sales sequence for Clara, a B2B spend-management platform operating in Mexico, Brazil and Colombia.
 
@@ -14,7 +14,7 @@ Rules:
 5. Any request to stop being contacted, in any wording or language -> add "unsubscribe_request". If that is the main message, intent is "unsubscribe".
 6. "I'm not the right person, talk to X" -> "referral" and add "wrong_person" only if they say they are not the right person.
 7. Replies like "ok", "?", "thanks" or a bare signature -> "unclear" with low confidence.
-8. Write `summary` in English, one sentence, for a sales rep.
+8. Write `summary` in English, one sentence, for a sales rep, and `summary_es` with the same sentence in Spanish.
 
 Intents:
 - interested: wants to talk, asks for a meeting, asks for more info with positive framing.

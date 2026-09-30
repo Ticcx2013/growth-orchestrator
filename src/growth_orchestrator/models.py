@@ -109,6 +109,7 @@ class ReplyInterpretation(BaseModel):
     extracted: ExtractedFacts
     risk_flags: list[RiskFlag] = Field(default_factory=list)
     summary: str = Field(description="One sentence for the SDR, in English.")
+    summary_es: str | None = Field(default=None, description="The same sentence in Spanish (Mexico).")
 
 
 class AIResult(BaseModel):

@@ -6,10 +6,10 @@
   <!-- Scenarios -->
   <aside class="col-span-12 lg:col-span-4 space-y-3">
     <div class="flex items-baseline justify-between">
-      <h1 class="text-lg font-semibold">Scenarios</h1>
-      <button @click="reset()" class="text-xs text-slate-500 hover:text-slate-900 underline">reset state</button>
+      <h1 class="text-lg font-semibold" x-text="t('index.title')"></h1>
+      <button @click="reset()" class="text-xs text-slate-500 hover:text-slate-900 underline" x-text="t('index.reset')"></button>
     </div>
-    <p class="text-sm text-slate-500">Each run re-seeds the synthetic CRM and fires real events through the webhook pipeline.</p>
+    <p class="text-sm text-slate-500" x-text="t('index.intro')"></p>
     <template x-for="s in scenarios" :key="s.key">
       <button @click="run(s.key)" :disabled="running"
               class="card w-full text-left p-4 hover:border-indigo-300 hover:shadow-sm transition disabled:opacity-60"
@@ -17,15 +17,15 @@
         <div class="flex items-center gap-2">
           <span class="text-xs px-1.5 py-0.5 rounded"
                 :class="{ success: 'bg-emerald-100 text-emerald-700', reliability: 'bg-sky-100 text-sky-700', ai: 'bg-pink-100 text-pink-700' }[s.kind]"
-                x-text="s.kind"></span>
-          <span class="font-medium" x-text="s.title"></span>
+                x-text="t('kind.' + s.kind)"></span>
+          <span class="font-medium" x-text="t('scenario.' + s.key + '.title')"></span>
         </div>
-        <p class="text-sm text-slate-500 mt-1" x-text="s.summary"></p>
+        <p class="text-sm text-slate-500 mt-1" x-text="t('scenario.' + s.key + '.summary')"></p>
       </button>
     </template>
 
-    <div class="card p-4 text-sm">
-      <p class="font-medium mb-1">Or hit the webhook yourself</p>
+    <div class="card p-4 text-sm mono-hide">
+      <p class="font-medium mb-1" x-text="t('index.curl')"></p>
       <pre class="mono text-[11px] leading-snug bg-slate-900 text-slate-100 rounded-lg p-3 overflow-x-auto">curl -X POST localhost:8000/events?sync=true \
   -H 'Content-Type: application/json' \
   -d '{"event_id":"evt_1","type":"reply.received",
@@ -39,14 +39,14 @@
   <section class="col-span-12 lg:col-span-8 space-y-5">
     <div class="card p-4">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="font-semibold">event → state → decision → AI/rules → action → audit</h2>
-        <span x-show="running" class="text-xs text-indigo-600 animate-pulse">running…</span>
+        <h2 class="font-semibold" x-text="t('index.pipeline')"></h2>
+        <span x-show="running" class="text-xs text-indigo-600 animate-pulse" x-text="t('index.running')"></span>
       </div>
       <div class="grid grid-cols-6 gap-2">
         <template x-for="node in pipeline" :key="node.key">
           <div class="rounded-xl border p-3 text-center transition"
                :class="nodeState(node.key) === 'done' ? 'border-indigo-300 bg-indigo-50' : nodeState(node.key) === 'alert' ? 'border-amber-300 bg-amber-50' : nodeState(node.key) === 'skipped' ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200'">
-            <div class="text-[11px] uppercase tracking-wide text-slate-500" x-text="node.label"></div>
+            <div class="text-[11px] uppercase tracking-wide text-slate-500" x-text="t('pipeline.' + node.key)"></div>
             <div class="text-xs mt-1 text-slate-700 min-h-[1.25rem]" x-text="nodeSummary(node.key)"></div>
           </div>
         </template>
@@ -55,44 +55,45 @@
 
     <template x-if="!current">
       <div class="card p-8 text-center text-slate-500">
-        <p class="text-base">Pick a scenario on the left.</p>
-        <p class="text-sm mt-1">You will see every stage the event goes through, what the rules said, what the model said, what the policy decided, and what hit the CRM.</p>
+        <p class="text-base" x-text="t('index.pick')"></p>
+        <p class="text-sm mt-1" x-text="t('index.pick_sub')"></p>
       </div>
     </template>
 
     <template x-if="current">
       <div class="space-y-4">
         <div class="flex items-baseline justify-between">
-          <h2 class="text-lg font-semibold" x-text="current.title"></h2>
-          <span class="text-xs text-slate-500" x-text="'AI ' + current.ai_mode"></span>
+          <h2 class="text-lg font-semibold" x-text="t('scenario.' + current.key + '.title')"></h2>
+          <span class="text-xs text-slate-500" x-text="t(current.ai_mode === 'live' ? 'badge.live' : 'badge.offline')"></span>
         </div>
-        <p class="text-sm text-slate-600" x-text="current.summary"></p>
+        <p class="text-sm text-slate-600" x-text="t('scenario.' + current.key + '.summary')"></p>
 
         <template x-for="(step, i) in current.steps" :key="i">
           <div class="card p-4 space-y-3">
             <div>
               <div class="flex items-start gap-2">
-                <span class="mt-0.5 text-xs font-semibold text-indigo-600" x-text="'step ' + (i + 1)"></span>
-                <h3 class="font-medium" x-text="step.title"></h3>
+                <span class="mt-0.5 text-xs font-semibold text-indigo-600" x-text="t('index.step') + ' ' + (i + 1)"></span>
+                <h3 class="font-medium" x-text="stepText(step, 'title')"></h3>
               </div>
-              <p x-show="step.note" class="text-sm text-slate-500 mt-1" x-text="step.note"></p>
+              <p x-show="stepText(step, 'note')" class="text-sm text-slate-500 mt-1" x-text="stepText(step, 'note')"></p>
               <template x-if="step.event && step.event.payload.text">
-                <blockquote class="mt-2 text-sm border-l-2 border-slate-300 pl-3 italic text-slate-700">“<span x-text="step.event.payload.text"></span>”</blockquote>
+                <blockquote class="mt-2 text-sm border-l-2 border-slate-300 pl-3 italic text-slate-700">
+                  <span x-show="isPlain()" class="not-italic text-slate-500" x-text="t('index.reply') + ': '"></span>“<span x-text="step.event.payload.text"></span>”</blockquote>
               </template>
               <template x-if="step.event && !step.event.payload.text">
-                <div class="mt-2 mono text-xs text-slate-500" x-text="step.event.type + ' ' + JSON.stringify(step.event.payload)"></div>
+                <div class="mt-2 mono text-xs text-slate-500 mono-hide" x-text="step.event.type + ' ' + JSON.stringify(step.event.payload)"></div>
               </template>
             </div>
 
             <ol class="space-y-1">
-              <template x-for="(t, j) in step.trace" :key="j">
+              <template x-for="(tr, j) in step.trace" :key="j">
                 <li>
                   <details class="group">
-                    <summary class="flex items-start gap-2 py-1 rounded hover:bg-slate-50">
-                      <span class="stage-pill mono text-[11px] px-1.5 py-0.5 rounded shrink-0 w-40 text-center" :class="'stage-' + t.stage" x-text="t.stage"></span>
-                      <span class="text-sm text-slate-800" x-text="t.message"></span>
+                    <summary class="flex items-start gap-2 py-1 rounded hover:bg-slate-50" :class="isPlain() && 'cursor-default'">
+                      <span class="stage-pill text-[11px] px-1.5 py-0.5 rounded shrink-0 w-40 text-center" :class="'stage-' + tr.stage + (isPlain() ? '' : ' mono')" x-text="stageLabel(tr.stage)"></span>
+                      <span class="text-sm text-slate-800" x-text="stageText(tr)"></span>
                     </summary>
-                    <pre x-show="t.data" class="mono text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-3 mt-1 ml-42 overflow-x-auto max-h-72" x-text="fmtJSON(t.data)"></pre>
+                    <pre x-show="tr.data && !isPlain()" class="mono text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-3 mt-1 overflow-x-auto max-h-72" x-text="fmtJSON(tr.data)"></pre>
                   </details>
                 </li>
               </template>
@@ -100,23 +101,23 @@
 
             <div class="flex flex-wrap gap-2 text-xs">
               <template x-if="step.result && step.result.action">
-                <span class="px-2 py-1 rounded-md bg-slate-900 text-white">action: <b x-text="step.result.action"></b></span>
+                <span class="px-2 py-1 rounded-md bg-slate-900 text-white"><span x-text="t('result.action') + ': '"></span><b x-text="tAction(step.result.action)"></b></span>
               </template>
               <template x-if="step.result && step.result.automated !== undefined">
                 <span class="px-2 py-1 rounded-md border" :class="step.result.automated ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-amber-300 text-amber-700 bg-amber-50'"
-                      x-text="step.result.automated ? 'automated' : 'not automated'"></span>
+                      x-text="t(step.result.automated ? 'result.automated' : 'result.not_automated')"></span>
               </template>
               <template x-if="step.result && step.result.requires_review">
-                <span class="px-2 py-1 rounded-md border border-orange-300 text-orange-700 bg-orange-50">human review</span>
+                <span class="px-2 py-1 rounded-md border border-orange-300 text-orange-700 bg-orange-50" x-text="t('result.review')"></span>
               </template>
-              <template x-if="step.result && step.result.status">
-                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600" x-text="'status: ' + step.result.status + (step.result.attempts ? ' · attempts ' + step.result.attempts : '')"></span>
+              <template x-if="step.result && step.result.status && step.result.attempts !== undefined">
+                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600" x-text="t('result.status') + ': ' + t('status.' + step.result.status) + ' · ' + t('result.attempts') + ' ' + step.result.attempts"></span>
               </template>
               <template x-if="step.result && step.result.external_ref">
-                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600 mono" x-text="'ref: ' + step.result.external_ref"></span>
+                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600 mono mono-hide" x-text="t('result.ref') + ': ' + step.result.external_ref"></span>
               </template>
               <template x-if="step.crm">
-                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600" x-text="'CRM: ' + JSON.stringify(step.crm.records)"></span>
+                <span class="px-2 py-1 rounded-md border border-slate-200 text-slate-600" x-text="t('result.crm') + ': ' + crmWords(step.crm.records)"></span>
               </template>
             </div>
           </div>
@@ -124,16 +125,16 @@
 
         <div class="card p-4 grid grid-cols-2 gap-4 text-sm">
           <div>
-            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">CRM records at the end</div>
-            <div class="mono text-xs" x-text="JSON.stringify(current.crm.records)"></div>
-            <div class="text-xs text-slate-500 mt-1" x-text="current.crm.calls + ' API calls · faults fired: ' + JSON.stringify(current.crm.faults_fired)"></div>
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1" x-text="t('index.crm_end')"></div>
+            <div class="text-sm" x-text="crmWords(current.crm.records)"></div>
+            <div class="text-xs text-slate-500 mt-1" x-text="current.crm.calls + ' ' + t('index.calls') + (current.crm.faults_fired.length ? ' · ' + t('index.faults') + ': ' + faultWords(current.crm.faults_fired) : '')"></div>
           </div>
           <div>
-            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1">Open review items</div>
-            <template x-if="current.review_queue.length === 0"><div class="text-slate-500">none</div></template>
+            <div class="text-xs uppercase tracking-wide text-slate-500 mb-1" x-text="t('index.review_open')"></div>
+            <template x-if="current.review_queue.length === 0"><div class="text-slate-500" x-text="t('index.none')"></div></template>
             <template x-for="r in current.review_queue" :key="r.id">
-              <div class="text-xs"><span class="mono">#<span x-text="r.id"></span></span> <span x-text="r.reason"></span>
-                <a href="/operations" class="text-indigo-600 underline ml-1">review</a></div>
+              <div class="text-xs"><span class="mono">#<span x-text="r.id"></span></span> <span x-text="isPlain() ? (r.proposed_action ? tAction(r.proposed_action) : '') : r.reason"></span>
+                <a href="/operations" class="text-indigo-600 underline ml-1" x-text="t('index.review')"></a></div>
             </template>
           </div>
         </div>
@@ -152,34 +153,49 @@ function controlRoom() {
     action: ['action_enqueued', 'action_dispatched', 'action_uncertain', 'action_reconciled', 'action_retry_scheduled', 'action_dead'],
     audit: ['completed', 'failed'],
   };
+  const KIND_WORDS = { deal: ['deal', 'deals'], task: ['task', 'tasks'], contact: ['contact', 'contacts'], suppression: ['do-not-contact entry', 'do-not-contact entries'],
+                       lifecycle_update: ['status update', 'status updates'], sequence_enrollment: ['sequence enrolment', 'sequence enrolments'], enrichment: ['data lookup', 'data lookups'] };
+  const KIND_WORDS_ES = { deal: ['deal', 'deals'], task: ['tarea', 'tareas'], contact: ['contacto', 'contactos'], suppression: ['entrada de no contactar', 'entradas de no contactar'],
+                          lifecycle_update: ['cambio de estatus', 'cambios de estatus'], sequence_enrollment: ['inscripción a secuencia', 'inscripciones a secuencia'], enrichment: ['búsqueda de datos', 'búsquedas de datos'] };
+  const FAULT_WORDS = { en: { timeout_after_commit: 'the CRM saved but never answered', timeout_before_commit: 'the CRM never received the request', rate_limit: 'the CRM asked us to slow down', permanent_error: 'the CRM rejected the request' },
+                        es: { timeout_after_commit: 'el CRM guardó pero nunca contestó', timeout_before_commit: 'el CRM nunca recibió la petición', rate_limit: 'el CRM pidió bajar el ritmo', permanent_error: 'el CRM rechazó la petición' } };
   return {
+    faultWords(list) { const W = FAULT_WORDS[window.prefs.lang] || FAULT_WORDS.en; return list.map(f => isPlain() ? (W[f.fault] || f.fault) : f.fault).join(', '); },
     scenarios: {{ scenarios | tojson }},
     current: null, running: false,
-    pipeline: [
-      { key: 'event', label: 'Event' }, { key: 'state', label: 'State' }, { key: 'rules', label: 'Rules & AI' },
-      { key: 'decision', label: 'Decision' }, { key: 'action', label: 'Action' }, { key: 'audit', label: 'Audit' },
-    ],
+    pipeline: [{ key: 'event' }, { key: 'state' }, { key: 'rules' }, { key: 'decision' }, { key: 'action' }, { key: 'audit' }],
     init() {
-      // Deep link: /?run=happy_path runs a scenario on load (handy for demos and screenshots).
       const key = new URLSearchParams(location.search).get('run');
       if (key && this.scenarios.some(s => s.key === key)) this.run(key);
     },
+    stepText(step, field) {
+      const k = 'step.' + step.key + '.' + field;
+      const v = t(k);
+      return v === k ? (step[field] || '') : v;
+    },
+    crmWords(records) {
+      const entries = Object.entries(records || {});
+      if (!entries.length) return t('index.none');
+      if (!isPlain()) return JSON.stringify(records);
+      const W = window.prefs.lang === 'es' ? KIND_WORDS_ES : KIND_WORDS;
+      return entries.map(([k, n]) => n + ' ' + ((W[k] || [k, k])[n === 1 ? 0 : 1])).join(', ');
+    },
     allTrace() { return this.current ? this.current.steps.flatMap(s => s.trace) : []; },
     nodeState(key) {
-      const rows = this.allTrace().filter(t => NODE_STAGES[key].includes(t.stage));
+      const rows = this.allTrace().filter(tr => NODE_STAGES[key].includes(tr.stage));
       if (!rows.length) return this.current ? 'skipped' : 'idle';
-      if (rows.some(t => ['action_uncertain', 'action_retry_scheduled', 'review_queued', 'stale_event', 'action_dead', 'duplicate'].includes(t.stage))) return 'alert';
-      if (rows.every(t => /skipped/.test(t.message))) return 'skipped';
+      if (rows.some(tr => ['action_uncertain', 'action_retry_scheduled', 'review_queued', 'stale_event', 'action_dead', 'duplicate'].includes(tr.stage))) return 'alert';
+      if (rows.every(tr => /skipped/.test(tr.message))) return 'skipped';
       return 'done';
     },
     nodeSummary(key) {
-      const rows = this.allTrace().filter(t => NODE_STAGES[key].includes(t.stage));
+      const rows = this.allTrace().filter(tr => NODE_STAGES[key].includes(tr.stage));
       if (!rows.length) return this.current ? '—' : '';
       const last = rows[rows.length - 1];
-      if (key === 'decision') { const d = rows.find(t => t.stage === 'decision'); return d ? d.data.action : last.stage; }
-      if (key === 'rules') { const a = rows.find(t => t.stage === 'ai_interpretation'); return a ? a.message.split(' ')[0].replace('intent=', '') : 'rules only'; }
-      if (key === 'action') { const s = rows.filter(t => t.stage !== 'action_enqueued'); return s.length ? s[s.length - 1].stage.replace('action_', '') : 'queued'; }
-      return rows.length + ' record' + (rows.length > 1 ? 's' : '');
+      if (key === 'decision') { const d = rows.find(tr => tr.stage === 'decision'); return d ? tAction(d.data.action) : stageLabel(last.stage); }
+      if (key === 'rules') { const a = rows.find(tr => tr.stage === 'ai_interpretation'); return a && a.data && a.data.interpretation ? tIntent(a.data.interpretation.intent) : t('pipeline.rules_only'); }
+      if (key === 'action') { const s = rows.filter(tr => tr.stage !== 'action_enqueued'); return s.length ? stageLabel(s[s.length - 1].stage).replace('action_', '') : t('pipeline.queued'); }
+      return rows.length + ' ' + t(rows.length > 1 ? 'pipeline.records' : 'pipeline.record');
     },
     async run(key) {
       this.running = true;

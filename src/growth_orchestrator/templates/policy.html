@@ -2,41 +2,41 @@
 {% block title %} · Policy{% endblock %}
 {% block content %}
 <div x-data="policyPage()" x-init="load()" class="space-y-6">
-  <div class="flex items-end justify-between">
+  <div class="flex items-end justify-between gap-6">
     <div>
-      <h1 class="text-lg font-semibold">Policy: what the system may do on its own</h1>
-      <p class="text-sm text-slate-500">This is <span class="mono">policy.yaml</span>. Change it here, re-run a scenario in the control room, and watch the decision change. No code involved.</p>
+      <h1 class="text-lg font-semibold" x-text="t('policy.title')"></h1>
+      <p class="text-sm text-slate-500" x-text="t('policy.subtitle')"></p>
     </div>
-    <div class="text-right">
-      <div class="text-xs text-slate-500">version <b x-text="policy.version"></b></div>
-      <button @click="save()" :disabled="saving" class="mt-1 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-60">Save policy</button>
+    <div class="text-right shrink-0">
+      <div class="text-xs text-slate-500"><span x-text="t('policy.version')"></span> <b x-text="policy.version"></b></div>
+      <button @click="save()" :disabled="saving" class="mt-1 px-4 py-2 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-60" x-text="t('policy.save')"></button>
       <div x-show="msg" class="text-xs mt-1" :class="ok ? 'text-emerald-600' : 'text-red-600'" x-text="msg"></div>
     </div>
   </div>
 
   <div class="card p-4">
-    <div class="text-xs uppercase tracking-wide text-slate-500 mb-2">Presets (for "change one assumption" moments)</div>
+    <div class="text-xs uppercase tracking-wide text-slate-500 mb-2" x-text="t('policy.presets')"></div>
     <div class="flex flex-wrap gap-2 text-sm">
-      <button @click="preset('shadow')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Shadow mode: everything assisted</button>
-      <button @click="preset('autonomous')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Fully autonomous</button>
-      <button @click="preset('kill')" class="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50">Kill switch: everything off</button>
-      <button @click="preset('conservative')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Conservative (default)</button>
+      <button @click="preset('shadow')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50" x-text="t('policy.preset.shadow')"></button>
+      <button @click="preset('autonomous')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50" x-text="t('policy.preset.autonomous')"></button>
+      <button @click="preset('kill')" class="px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50" x-text="t('policy.preset.kill')"></button>
+      <button @click="preset('conservative')" class="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50" x-text="t('policy.preset.conservative')"></button>
     </div>
   </div>
 
   <div class="grid grid-cols-12 gap-6">
     <div class="col-span-12 lg:col-span-5 card p-4">
-      <h2 class="font-medium mb-1">Automation mode per action</h2>
-      <p class="text-xs text-slate-500 mb-3"><b>auto</b> runs alone · <b>assisted</b> proposes and waits for a human · <b>off</b> logs only</p>
+      <h2 class="font-medium mb-1" x-text="t('policy.automation')"></h2>
+      <p class="text-xs text-slate-500 mb-3" x-text="t('policy.automation_hint')"></p>
       <div class="space-y-2">
         <template x-for="a in actions" :key="a">
           <div class="flex items-center justify-between gap-3">
-            <span class="mono text-sm" x-text="a"></span>
-            <div class="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
+            <span class="text-sm" :class="!isPlain() && 'mono'" x-text="tAction(a)"></span>
+            <div class="flex rounded-lg border border-slate-200 overflow-hidden text-xs shrink-0">
               <template x-for="m in ['auto','assisted','off']" :key="m">
-                <button @click="policy.automation[a] = m" class="px-3 py-1.5"
+                <button @click="policy.automation[a] = m" class="px-3 py-1.5 whitespace-nowrap"
                         :class="policy.automation[a] === m ? (m === 'auto' ? 'bg-emerald-600 text-white' : m === 'assisted' ? 'bg-amber-500 text-white' : 'bg-red-600 text-white') : 'bg-white text-slate-600 hover:bg-slate-50'"
-                        x-text="m"></button>
+                        x-text="t('mode.' + m)"></button>
               </template>
             </div>
           </div>
@@ -46,48 +46,54 @@
 
     <div class="col-span-12 lg:col-span-7 space-y-6">
       <div class="card p-4">
-        <h2 class="font-medium mb-3">AI gates</h2>
+        <h2 class="font-medium mb-3" x-text="t('policy.ai')"></h2>
         <div class="grid grid-cols-2 gap-4 text-sm">
-          <label class="block">Minimum confidence to automate
+          <label class="block"><span x-text="t('policy.min_conf')"></span>
             <input type="number" step="0.05" min="0" max="1" x-model.number="policy.ai.min_confidence_auto" class="mt-1 w-full border rounded-lg px-3 py-1.5">
           </label>
-          <label class="block">Minimum confidence for high-risk intents
+          <label class="block"><span x-text="t('policy.min_conf_hr')"></span>
             <input type="number" step="0.05" min="0" max="1" x-model.number="policy.ai.min_confidence_high_risk" class="mt-1 w-full border rounded-lg px-3 py-1.5">
           </label>
-          <label class="block col-span-2">High-risk intents (comma separated)
-            <input type="text" :value="policy.ai.high_risk_intents.join(', ')" @change="policy.ai.high_risk_intents = splitList($event.target.value)" class="mt-1 w-full border rounded-lg px-3 py-1.5 mono">
-          </label>
+          <div class="block col-span-2"><span x-text="t('policy.hr_intents')"></span>
+            <div class="flex flex-wrap gap-2 mt-1">
+              <template x-for="i in intents" :key="i">
+                <button @click="toggleHighRisk(i)" class="px-2.5 py-1 rounded-lg border text-xs"
+                        :class="policy.ai.high_risk_intents.includes(i) ? 'bg-amber-500 border-amber-500 text-white' : 'border-slate-300 text-slate-600 hover:bg-slate-50'"
+                        x-text="tIntent(i)"></button>
+              </template>
+            </div>
+          </div>
           <label class="flex items-center gap-2 col-span-2">
-            <input type="checkbox" x-model="policy.ai.freshness_check_before_irreversible"> Re-read the CRM before any irreversible action
+            <input type="checkbox" x-model="policy.ai.freshness_check_before_irreversible"> <span x-text="t('policy.freshness')"></span>
           </label>
         </div>
       </div>
 
       <div class="card p-4">
-        <h2 class="font-medium mb-3">Eligibility</h2>
+        <h2 class="font-medium mb-3" x-text="t('policy.elig')"></h2>
         <div class="grid grid-cols-2 gap-4 text-sm">
-          <label class="block">Cooldown after outreach (days)
+          <label class="block"><span x-text="t('policy.cooldown')"></span>
             <input type="number" x-model.number="policy.eligibility.cooldown_days" class="mt-1 w-full border rounded-lg px-3 py-1.5"></label>
-          <label class="block">Max contacts in sequence per account
+          <label class="block"><span x-text="t('policy.cap')"></span>
             <input type="number" x-model.number="policy.eligibility.max_active_contacts_per_account" class="mt-1 w-full border rounded-lg px-3 py-1.5"></label>
-          <label class="block">ICP: minimum employees
+          <label class="block"><span x-text="t('policy.icp_min')"></span>
             <input type="number" x-model.number="policy.eligibility.icp.min_employees" class="mt-1 w-full border rounded-lg px-3 py-1.5"></label>
-          <label class="block">ICP: countries
+          <label class="block"><span x-text="t('policy.icp_countries')"></span>
             <input type="text" :value="policy.eligibility.icp.countries.join(', ')" @change="policy.eligibility.icp.countries = splitList($event.target.value).map(s => s.toUpperCase())" class="mt-1 w-full border rounded-lg px-3 py-1.5 mono"></label>
-          <label class="block">Default wait when no date is stated (days)
+          <label class="block"><span x-text="t('policy.default_wait')"></span>
             <input type="number" x-model.number="policy.defaults.wait_days_when_no_date" class="mt-1 w-full border rounded-lg px-3 py-1.5"></label>
         </div>
       </div>
 
       <div class="card p-4">
-        <h2 class="font-medium mb-1">Intent → action map</h2>
-        <p class="text-xs text-slate-500 mb-3">The model names the intent. This table, not the model, names the action.</p>
-        <div class="grid grid-cols-2 gap-2 text-sm">
+        <h2 class="font-medium mb-1" x-text="t('policy.map')"></h2>
+        <p class="text-xs text-slate-500 mb-3" x-text="t('policy.map_hint')"></p>
+        <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
           <template x-for="(act, intent) in policy.intent_actions" :key="intent">
             <label class="flex items-center justify-between gap-2">
-              <span class="mono" x-text="intent"></span>
-              <select x-model="policy.intent_actions[intent]" class="border rounded-lg px-2 py-1 mono text-xs">
-                {% for a in actions + ['no_action'] %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+              <span :class="!isPlain() && 'mono'" x-text="tIntent(intent)"></span>
+              <select x-model="policy.intent_actions[intent]" class="border rounded-lg px-2 py-1 text-xs" :class="!isPlain() && 'mono'">
+                {% for a in actions + ['no_action'] %}<option value="{{ a }}" x-text="tAction('{{ a }}')"></option>{% endfor %}
               </select>
             </label>
           </template>
@@ -96,8 +102,8 @@
     </div>
   </div>
 
-  <details class="card p-4">
-    <summary class="text-sm text-slate-600">Raw policy JSON</summary>
+  <details class="card p-4 mono-hide">
+    <summary class="text-sm text-slate-600" x-text="t('policy.raw')"></summary>
     <pre class="mono text-xs mt-2 overflow-x-auto" x-text="fmtJSON(policy)"></pre>
   </details>
 </div>
@@ -106,10 +112,16 @@
 function policyPage() {
   return {
     actions: {{ actions | tojson }},
+    intents: ['interested', 'not_interested', 'out_of_office', 'referral', 'unsubscribe', 'pricing_question', 'later', 'mixed', 'unclear'],
     policy: { version: 0, automation: {}, ai: { high_risk_intents: [] }, eligibility: { icp: { countries: [] } }, intent_actions: {}, defaults: {} },
     saving: false, msg: '', ok: true,
     async load() { this.policy = await api('/api/policy'); },
     splitList(v) { return v.split(',').map(s => s.trim()).filter(Boolean); },
+    toggleHighRisk(i) {
+      const list = this.policy.ai.high_risk_intents;
+      const idx = list.indexOf(i);
+      if (idx >= 0) list.splice(idx, 1); else list.push(i);
+    },
     preset(kind) {
       const all = Object.keys(this.policy.automation);
       if (kind === 'shadow') all.forEach(a => this.policy.automation[a] = a === 'escalate_to_human' ? 'auto' : 'assisted');
@@ -120,7 +132,7 @@ function policyPage() {
     },
     async save() {
       this.saving = true; this.msg = '';
-      try { this.policy = await api('/api/policy', { method: 'PUT', body: JSON.stringify(this.policy) }); this.ok = true; this.msg = 'Saved as version ' + this.policy.version; }
+      try { this.policy = await api('/api/policy', { method: 'PUT', body: JSON.stringify(this.policy) }); this.ok = true; this.msg = t('policy.saved') + ' ' + this.policy.version; }
       catch (e) { this.ok = false; this.msg = e.message; }
       finally { this.saving = false; }
     },
