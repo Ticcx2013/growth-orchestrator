@@ -87,7 +87,7 @@
             <label class="flex items-center justify-between gap-2">
               <span class="mono" x-text="intent"></span>
               <select x-model="policy.intent_actions[intent]" class="border rounded-lg px-2 py-1 mono text-xs">
-                <template x-for="a in actions.concat(['no_action'])" :key="a"><option :value="a" x-text="a"></option></template>
+                {% for a in actions + ['no_action'] %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
               </select>
             </label>
           </template>

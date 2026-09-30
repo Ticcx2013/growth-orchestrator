@@ -44,29 +44,34 @@ Without an `ANTHROPIC_API_KEY` the system runs **offline**: the interpreter repl
 ## Architecture
 
 ```mermaid
-flowchart LR
-  subgraph Sources
+flowchart TB
+  subgraph sources[Sources]
+    direction LR
     OUT[Outreach tool<br/>reply.received]
-    CRM_W[CRM webhook<br/>crm.account_updated]
+    CRMW[CRM webhook<br/>crm.account_updated]
     ENR[Enrichment<br/>prospect.identified]
   end
-  OUT & CRM_W & ENR --> WH[/POST /events<br/>HMAC · 202/]
-  WH --> ING[Ingest<br/>event_id = idempotency key]
-  ING -- duplicate --> DUP[(ignored, counted)]
-  ING --> ST[(State<br/>accounts · contacts · suppressions<br/>versioned, never rolls back)]
-  ST --> EL[Eligibility rules]
-  EL --> CO[Compliance rules<br/>opt-out ES/PT/EN · injection]
-  CO --> AI[Reply interpreter<br/>Claude · structured output]
+  sources --> WH[/POST /events · HMAC · 202 in ms/]
+  WH --> ING[Ingest: event_id is the idempotency key]
+  ING -. duplicate .-> DUP[(ignored and counted)]
+  ING --> ST[(State: accounts · contacts · suppressions<br/>versioned, never rolls back)]
+  ST --> EL[Eligibility rules<br/>customer · opportunity · suppression · cooldown · cap · ICP]
+  EL --> CO[Compliance rules<br/>opt-out ES/PT/EN · injection heuristics]
+  CO --> AI[Reply interpreter · Claude<br/>structured output, evidence must be verbatim]
   AI --> VAL{Validation<br/>schema · grounding · dates}
-  VAL -- fail --> REP[1 repair attempt] --> VAL
-  VAL --> POL[Policy engine<br/>intent × confidence × state → action]
-  CO -- opt-out --> POL
-  POL -- irreversible --> FR[Freshness check<br/>re-read CRM] --> OB
-  POL --> OB[(Outbox<br/>one idempotency key per action)]
-  POL -- ambiguous --> HQ[(Human review)]
-  OB --> EXE[Dispatcher<br/>retry · backoff · reconcile] --> CRM[(CRM / outreach<br/>mock adapter)]
-  EXE -- dead --> HQ
-  ING & EL & CO & AI & POL & EXE --> AUD[(Audit log)]
+  VAL -. fail .-> REP[one repair round] -.-> VAL
+  VAL --> POL[Policy engine<br/>intent × confidence × state → action · auto / assisted / off]
+  CO -- opt-out, rule wins --> POL
+  POL -- irreversible action --> FR[Freshness check: re-read the CRM] --> OB
+  POL --> OB[(Outbox: one idempotency key per action)]
+  POL -- ambiguous · low confidence · flagged --> HQ[(Human review queue)]
+  OB --> EXE[Dispatcher<br/>retry · backoff · reconcile uncertain outcomes] --> CRM[(CRM / outreach<br/>mock adapter, HubSpot stub)]
+  EXE -. dead letter .-> HQ
+  ING & EL & CO & AI & POL & EXE --> AUD[(Audit log: stage · reason · prompt and policy versions)]
+  classDef store fill:#eef2ff,stroke:#6366f1,color:#1e1b4b;
+  classDef ai fill:#fdf2f8,stroke:#db2777,color:#500724;
+  classDef human fill:#fff7ed,stroke:#ea580c,color:#431407;
+  class ST,OB,AUD,DUP store; class AI,VAL,REP ai; class HQ human;
 ```
 
 **Stack:** Python 3.12, FastAPI, SQLite, Pydantic, Anthropic SDK, pytest. Console in server-rendered HTML with Tailwind and Alpine (no build step). ~3,100 lines including tests.

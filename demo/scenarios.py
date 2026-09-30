@@ -59,18 +59,19 @@ def crm_failure_retry(rt: Runtime) -> list[Step]:
               "The write landed but we never saw the response. The action is marked 'uncertain', not 'failed', and a retry is scheduled.")
     s1["crm"] = _crm_snapshot(rt)
 
-    rt.clock.advance(31)
-    rt.orchestrator.outbox.process_due()
-    s2 = {"title": "Retry #2 (30s later): reconcile by idempotency key, then the task call gets a 429", "note":
-          "Before re-sending, the outbox asks the CRM whether the deal exists. It does, so it is reused. The dependent task write is rate-limited and backs off.",
-          "event": None, "result": rt.db.one("SELECT status, attempts, external_ref, last_error FROM actions WHERE event_id = ?", (ev.event_id,)),
-          "trace": [t for t in rt.db.trace(ev.event_id) if t["stage"].startswith("action")][-3:], "crm": _crm_snapshot(rt)}
+    def retry_step(title: str, note: str, advance_s: float) -> Step:
+        seen = len(rt.db.trace(ev.event_id))
+        rt.clock.advance(advance_s)
+        rt.orchestrator.outbox.process_due()
+        row = rt.db.one("SELECT status, attempts, external_ref, last_error FROM actions WHERE event_id = ?", (ev.event_id,))
+        return {"title": title, "note": note, "event": None, "result": row,
+                "trace": rt.db.trace(ev.event_id)[seen:], "crm": _crm_snapshot(rt)}
 
-    rt.clock.advance(31)
-    rt.orchestrator.outbox.process_due()
-    s3 = {"title": "Retry #3: everything completes. Exactly one deal and one task exist.", "note": "",
-          "event": None, "result": rt.db.one("SELECT status, attempts, external_ref, last_error FROM actions WHERE event_id = ?", (ev.event_id,)),
-          "trace": [t for t in rt.db.trace(ev.event_id) if t["stage"].startswith("action")][-2:], "crm": _crm_snapshot(rt)}
+    s2 = retry_step("Retry #2 (30s later): reconcile by idempotency key, then the task call gets a 429",
+                    "Before re-sending, the outbox asks the CRM whether the deal exists. It does, so it is reused rather than created again. "
+                    "The dependent task write is rate-limited and backs off for two minutes.", 31)
+    s3 = retry_step("Retry #3 (2 min later): everything completes. Exactly one deal and one task exist.",
+                    "The deal write returns the existing record; the task is created once. Local state is updated only now, when the action is known to have succeeded.", 121)
     return [s1, s2, s3]
 
 
@@ -135,6 +136,11 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 
 def run_scenario(rt: Runtime, key: str, reset: bool = True) -> dict[str, Any]:
     spec = SCENARIOS[key]
+    with rt.lock:
+        return _run_locked(rt, key, spec, reset)
+
+
+def _run_locked(rt: Runtime, key: str, spec: dict[str, Any], reset: bool) -> dict[str, Any]:
     if reset:
         rt.clock.reset()
         seed(rt.db, rt.crm, now=rt.clock())

@@ -38,6 +38,16 @@
             <div class="text-xs text-slate-500">system decision: <span class="mono" x-text="r.decision_action"></span>
               <template x-if="r.proposed_action"><span> · proposed: <span class="mono" x-text="r.proposed_action"></span></span></template>
             </div>
+            <template x-if="r.ai">
+              <div class="mt-1 rounded-lg bg-pink-50 border border-pink-100 px-3 py-2 text-xs text-slate-700">
+                <span class="font-medium text-pink-700">model read:</span> <span x-text="r.ai.intent"></span> · confidence <span x-text="r.ai.confidence"></span>
+                <template x-if="r.ai.risk_flags && r.ai.risk_flags.length"><span> · flags <span class="mono" x-text="r.ai.risk_flags.join(', ')"></span></span></template>
+                <div x-text="r.ai.summary"></div>
+                <template x-if="r.ai.extracted && (r.ai.extracted.referral_email || r.ai.extracted.return_date || r.ai.extracted.follow_up_date || r.ai.extracted.company_size)">
+                  <div class="mono text-[11px] text-slate-500" x-text="JSON.stringify(Object.fromEntries(Object.entries(r.ai.extracted).filter(([k, v]) => v && !(Array.isArray(v) && !v.length))))"></div>
+                </template>
+              </div>
+            </template>
           </div>
           <div x-show="r.status === 'open'" class="flex flex-col gap-2 shrink-0">
             <button @click="approve(r)" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-sm" x-text="r.proposed_action ? 'Approve ' + r.proposed_action : 'Close: no action'"></button>
@@ -63,7 +73,7 @@
             <td class="p-3 text-xs" x-text="a.target_system"></td>
             <td class="p-3"><span class="text-xs px-1.5 py-0.5 rounded" :class="statusClass(a.status)" x-text="a.status"></span></td>
             <td class="p-3" x-text="a.attempts"></td>
-            <td class="p-3 text-xs text-slate-500" x-text="a.next_attempt_at ? a.next_attempt_at.slice(11, 19) + 'Z' : ''"></td>
+            <td class="p-3 text-xs text-slate-500" x-text="['pending','uncertain'].includes(a.status) && a.next_attempt_at ? a.next_attempt_at.slice(11, 19) + 'Z' : ''"></td>
             <td class="p-3 mono text-xs" x-text="a.external_ref || ''"></td>
             <td class="p-3 text-xs text-red-600" x-text="a.last_error || ''"></td>
           </tr>

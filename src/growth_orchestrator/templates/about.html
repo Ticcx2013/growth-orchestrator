@@ -3,7 +3,7 @@
 {% block head %}
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', fontFamily: 'Inter' });
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose', fontFamily: 'Inter', flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' } });
 </script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
@@ -20,6 +20,7 @@
 </style>
 {% endblock %}
 {% block content %}
+<script type="application/json" id="docs-json">{{ docs | tojson }}</script>
 <div x-data="about()" x-init="load()" class="space-y-6">
   <div>
     <h1 class="text-lg font-semibold">How it works</h1>
@@ -29,34 +30,30 @@
   <div class="card p-4">
     <h2 class="font-medium mb-2">Architecture</h2>
     <pre class="mermaid text-sm">
-flowchart LR
-  subgraph Sources
+flowchart TB
+  subgraph sources[Sources]
+    direction LR
     OUT[Outreach tool<br/>reply.received]
-    CRM_W[CRM webhook<br/>crm.account_updated]
+    CRMW[CRM webhook<br/>crm.account_updated]
     ENR[Enrichment<br/>prospect.identified]
   end
-  OUT --> WH
-  CRM_W --> WH
-  ENR --> WH
-  WH[/POST /events<br/>HMAC · 202 in &lt;100ms/] --> ING[Ingest<br/>event_id PK = idempotency]
-  ING -- duplicate --> DUP[(ignored, counted)]
-  ING --> ST[(State<br/>accounts · contacts · suppressions<br/>versioned, never rolls back)]
-  ST --> EL[Eligibility rules<br/>customer · opportunity · suppression<br/>cooldown · cap · ICP]
+  sources --> WH[/POST /events · HMAC · 202 in ms/]
+  WH --> ING[Ingest: event_id is the idempotency key]
+  ING -. duplicate .-> DUP[(ignored and counted)]
+  ING --> ST[(State: accounts · contacts · suppressions<br/>versioned, never rolls back)]
+  ST --> EL[Eligibility rules<br/>customer · opportunity · suppression · cooldown · cap · ICP]
   EL --> CO[Compliance rules<br/>opt-out ES/PT/EN · injection heuristics]
-  CO --> AI[Reply interpreter<br/>Claude · structured output<br/>evidence must be verbatim]
+  CO --> AI[Reply interpreter · Claude<br/>structured output, evidence must be verbatim]
   AI --> VAL{Validation<br/>schema · grounding · dates}
-  VAL -- fail --> REP[1 repair attempt]
-  REP --> VAL
-  VAL --> POL[Policy engine<br/>intent × confidence × state → action<br/>auto · assisted · off]
-  CO -- opt-out --> POL
-  POL -- irreversible? --> FR[Freshness check<br/>re-read CRM]
-  FR --> OB[(Outbox<br/>idempotency key per action)]
-  POL --> OB
-  POL -- ambiguous / low confidence --> HQ[(Human review queue)]
-  OB --> EXE[Dispatcher<br/>retry · backoff · reconcile]
-  EXE --> CRM[(CRM / outreach<br/>mock adapter)]
-  EXE -- dead --> HQ
-  ING & ST & EL & CO & AI & VAL & POL & FR & OB & EXE --> AUD[(Audit log<br/>stage · reason · versions)]
+  VAL -. fail .-> REP[one repair round] -.-> VAL
+  VAL --> POL[Policy engine<br/>intent × confidence × state → action · auto / assisted / off]
+  CO -- opt-out, rule wins --> POL
+  POL -- irreversible action --> FR[Freshness check: re-read the CRM] --> OB
+  POL --> OB[(Outbox: one idempotency key per action)]
+  POL -- ambiguous · low confidence · flagged --> HQ[(Human review queue)]
+  OB --> EXE[Dispatcher<br/>retry · backoff · reconcile uncertain outcomes] --> CRM[(CRM / outreach<br/>mock adapter, HubSpot stub)]
+  EXE -. dead letter .-> HQ
+  ING & EL & CO & AI & POL & EXE --> AUD[(Audit log: stage · reason · prompt and policy versions)]
   classDef store fill:#eef2ff,stroke:#6366f1,color:#1e1b4b;
   classDef ai fill:#fdf2f8,stroke:#db2777,color:#500724;
   classDef human fill:#fff7ed,stroke:#ea580c,color:#431407;
@@ -121,7 +118,7 @@ flowchart LR
     {% for name, label in [("DECISIONS.md", "Decision log"), ("EXPERIMENT.md", "Measurement plan"), ("WHAT_IF.md", "If you change an assumption")] %}
     <details class="col-span-12 card p-4" {% if loop.first %}open{% endif %}>
       <summary class="font-medium">{{ label }} <span class="mono text-xs text-slate-400 ml-2">docs/{{ name }}</span></summary>
-      <div class="prose-doc mt-2" x-html="md({{ docs[name] | tojson }})"></div>
+      <div class="prose-doc mt-2" x-html="md(docs['{{ name }}'])"></div>
     </details>
     {% endfor %}
   </div>
@@ -130,10 +127,10 @@ flowchart LR
 <script>
 function about() {
   return {
-    evalData: null, reports: [],
+    evalData: null, reports: [], docs: JSON.parse(document.getElementById('docs-json').textContent),
     async load() { const r = await api('/api/eval/results'); this.evalData = r.latest; this.reports = r.reports; },
     pct(v) { return v == null ? '—' : Math.round(v * 100) + '%'; },
-    md(s) { return window.marked ? marked.parse(s || '') : s; },
+    md(s) { s = (s || '').replace(/^# .*\n/, ''); return window.marked ? marked.parse(s) : s; },
   };
 }
 </script>

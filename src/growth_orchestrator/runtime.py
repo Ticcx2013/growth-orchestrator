@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 
 from .ai.interpreter import ReplyInterpreter
 from .clock import Clock
@@ -22,6 +23,8 @@ class Runtime:
     policies: PolicyStore
     clock: Clock
     orchestrator: Orchestrator
+    # Prototype-level concurrency control: one writer at a time. Production uses a queue + per-account locks.
+    lock: threading.RLock = field(default_factory=threading.RLock)
 
 
 def build_runtime(settings: Settings | None = None, db_path: str | None = None) -> Runtime:

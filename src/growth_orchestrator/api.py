@@ -56,14 +56,16 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
         except ValidationError as e:
             raise HTTPException(422, e.errors())
 
-        ing = rt.orchestrator.ingest(event)
+        with rt.lock:
+            ing = rt.orchestrator.ingest(event)
         if ing["status"] == "duplicate":
             return JSONResponse({"status": "duplicate", "event_id": event.event_id}, status_code=200)
         if sync:
-            result = rt.orchestrator.process(event.event_id)
-            result["trace"] = rt.db.trace(event.event_id)
+            with rt.lock:
+                result = rt.orchestrator.process(event.event_id)
+                result["trace"] = rt.db.trace(event.event_id)
             return JSONResponse(result, status_code=200)
-        background.add_task(rt.orchestrator.process, event.event_id)
+        background.add_task(_process_locked, rt, event.event_id)
         return {"status": "accepted", "event_id": event.event_id}
 
     # ------------------------------------------------------------------------------
@@ -124,12 +126,16 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
     @app.get("/api/review")
     def review(status: str = "open"):
         rows = rt.db.all(
-            "SELECT r.*, d.action AS decision_action, d.reason AS decision_reason, d.payload_json, d.contact_id, d.account_id, e.payload_json AS event_payload"
+            "SELECT r.*, d.action AS decision_action, d.reason AS decision_reason, d.payload_json, d.contact_id, d.account_id,"
+            " e.payload_json AS event_payload, a.parsed_json AS ai_parsed"
             " FROM review_queue r JOIN decisions d ON d.id = r.decision_id JOIN events e ON e.event_id = r.event_id"
+            " LEFT JOIN ai_calls a ON a.id = d.ai_call_id"
             " WHERE (? = 'all' OR r.status = ?) ORDER BY r.id DESC", (status, status))
         for r in rows:
             r["payload"] = json.loads(r.pop("payload_json"))
             r["event_payload"] = json.loads(r.pop("event_payload"))
+            parsed = r.pop("ai_parsed")
+            r["ai"] = json.loads(parsed) if parsed else None
         return rows
 
     @app.post("/api/review/{item_id}/approve")
@@ -139,16 +145,17 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
             raise HTTPException(404, "review item not open")
         proposed = (body or {}).get("action") or item["proposed_action"]
         executed = None
-        if proposed and proposed not in ("no_action", "escalate_to_human"):
-            action = Action(proposed)
-            payload = json.loads(item["payload_json"])
-            row = rt.orchestrator.outbox.enqueue(decision_id=item["decision_id"], event_id=item["event_id"], action=action, payload=payload)
-            executed = rt.orchestrator.outbox.dispatch(row["idempotency_key"])
-            rt.db.audit(item["event_id"], "human_decision", f"reviewer approved {action.value}", {"review_id": item_id, "by": (body or {}).get("by", "console")})
-        else:
-            rt.db.audit(item["event_id"], "human_decision", "reviewer closed the item with no action", {"review_id": item_id})
-        rt.db.exec("UPDATE review_queue SET status='approved', resolved_by=?, resolution_note=?, resolved_at=? WHERE id=?",
-                   ((body or {}).get("by", "console"), (body or {}).get("note"), iso(rt.clock()), item_id))
+        with rt.lock:
+            if proposed and proposed not in ("no_action", "escalate_to_human"):
+                action = Action(proposed)
+                payload = json.loads(item["payload_json"])
+                row = rt.orchestrator.outbox.enqueue(decision_id=item["decision_id"], event_id=item["event_id"], action=action, payload=payload)
+                executed = rt.orchestrator.outbox.dispatch(row["idempotency_key"])
+                rt.db.audit(item["event_id"], "human_decision", f"reviewer approved {action.value}", {"review_id": item_id, "by": (body or {}).get("by", "console")})
+            else:
+                rt.db.audit(item["event_id"], "human_decision", "reviewer closed the item with no action", {"review_id": item_id})
+            rt.db.exec("UPDATE review_queue SET status='approved', resolved_by=?, resolution_note=?, resolved_at=? WHERE id=?",
+                       ((body or {}).get("by", "console"), (body or {}).get("note"), iso(rt.clock()), item_id))
         return {"status": "approved", "executed": executed}
 
     @app.post("/api/review/{item_id}/reject")
@@ -195,15 +202,17 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
 
     @app.post("/api/demo/reset")
     def reset():
-        rt.clock.reset()
-        seed(rt.db, rt.crm, now=rt.clock())
+        with rt.lock:
+            rt.clock.reset()
+            seed(rt.db, rt.crm, now=rt.clock())
         return {"status": "reset"}
 
     @app.post("/api/outbox/tick")
     def outbox_tick(advance_seconds: float = 0):
-        if advance_seconds:
-            rt.clock.advance(advance_seconds)
-        return {"processed": rt.orchestrator.outbox.process_due(), "clock": iso(rt.clock())}
+        with rt.lock:
+            if advance_seconds:
+                rt.clock.advance(advance_seconds)
+            return {"processed": rt.orchestrator.outbox.process_due(), "clock": iso(rt.clock())}
 
     @app.get("/api/eval/results")
     def eval_results():
@@ -245,6 +254,11 @@ def create_app(rt: Runtime | None = None) -> FastAPI:
         return page(request, "about", docs=docs)
 
     return app
+
+
+def _process_locked(rt: Runtime, event_id: str) -> None:
+    with rt.lock:
+        rt.orchestrator.process(event_id)
 
 
 app = create_app()
