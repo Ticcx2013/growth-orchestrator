@@ -179,9 +179,11 @@ if __name__ == "__main__":
         print(f"  {flag} {r['id']:<36} intent={str(r['got']['intent']):<16} action={r['got']['action']:<24} conf={r['got']['confidence']}")
         if not r["passed"]:
             print("       failed:", [k for k, v in r["checks"].items() if v is False], "| ai errors:", r["ai"]["validation_errors"])
-    if not args.no_write:
-        name = (args.label or s["model"]) + ("-offline" if s["mode"] == "offline" else "")
-        p = write_report(report, name)
+    if not args.no_write and s["mode"] == "live":
+        # Only live runs are evidence worth keeping; offline runs replay recorded answers and are a regression check.
+        p = write_report(report, args.label or s["model"])
         (RESULTS_DIR / "latest.json").write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         print("report:", p.relative_to(ROOT))
+    elif s["mode"] == "offline":
+        print("offline run: nothing written (use make eval-live for a report)")
     sys.exit(0 if s["unsafe_automations"] == 0 else 1)

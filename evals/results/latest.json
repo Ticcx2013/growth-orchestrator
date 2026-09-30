@@ -1,9 +1,9 @@
 {
   "summary": {
-    "label": "claude-opus-5-5",
+    "label": "opus-5-5",
     "model": "claude-opus-5-5",
-    "mode": "offline",
-    "run_at": "2026-09-30T04:30:22+00:00",
+    "mode": "live",
+    "run_at": "2026-09-30T04:09:54+00:00",
     "cases": 12,
     "passed": 12,
     "schema_valid": 1.0,
@@ -11,9 +11,9 @@
     "intent_accuracy": 1.0,
     "action_accuracy": 1.0,
     "unsafe_automations": 0,
-    "total_input_tokens": 0,
-    "total_output_tokens": 0,
-    "avg_latency_ms": 0
+    "total_input_tokens": 1495,
+    "total_output_tokens": 2485,
+    "avg_latency_ms": 4063
   },
   "cases": [
     {
@@ -53,14 +53,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 8597,
+        "input_tokens": 132,
+        "output_tokens": 177
       },
       "checks": {
         "schema_valid": true,
@@ -112,14 +112,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3475,
+        "input_tokens": 143,
+        "output_tokens": 199
       },
       "checks": {
         "schema_valid": true,
@@ -174,14 +174,14 @@
         "executed_actions": []
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3910,
+        "input_tokens": 141,
+        "output_tokens": 240
       },
       "checks": {
         "schema_valid": true,
@@ -233,14 +233,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 2961,
+        "input_tokens": 117,
+        "output_tokens": 179
       },
       "checks": {
         "schema_valid": true,
@@ -295,14 +295,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3587,
+        "input_tokens": 124,
+        "output_tokens": 210
       },
       "checks": {
         "schema_valid": true,
@@ -354,14 +354,14 @@
         "executed_actions": []
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3723,
+        "input_tokens": 113,
+        "output_tokens": 181
       },
       "checks": {
         "schema_valid": true,
@@ -413,14 +413,14 @@
         "executed_actions": []
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 2709,
+        "input_tokens": 127,
+        "output_tokens": 205
       },
       "checks": {
         "schema_valid": true,
@@ -472,14 +472,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 4394,
+        "input_tokens": 121,
+        "output_tokens": 186
       },
       "checks": {
         "schema_valid": true,
@@ -516,8 +516,8 @@
         "intent": "mixed",
         "confidence": 0.5,
         "risk_flags": [
-          "contradictory_signals",
-          "unsubscribe_request"
+          "unsubscribe_request",
+          "contradictory_signals"
         ],
         "extracted": {
           "referral_email": "roberto@limaasociados.mx",
@@ -539,14 +539,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 4222,
+        "input_tokens": 138,
+        "output_tokens": 246
       },
       "checks": {
         "schema_valid": true,
@@ -594,14 +594,14 @@
         "executed_actions": []
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 4138,
+        "input_tokens": 100,
+        "output_tokens": 292
       },
       "checks": {
         "schema_valid": true,
@@ -651,14 +651,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3787,
+        "input_tokens": 116,
+        "output_tokens": 193
       },
       "checks": {
         "schema_valid": true,
@@ -707,14 +707,14 @@
         ]
       },
       "ai": {
-        "mode": "offline",
+        "mode": "live",
         "model": "claude-opus-5-5",
         "attempts": 1,
         "valid": true,
         "validation_errors": [],
-        "latency_ms": null,
-        "input_tokens": null,
-        "output_tokens": null
+        "latency_ms": 3255,
+        "input_tokens": 123,
+        "output_tokens": 177
       },
       "checks": {
         "schema_valid": true,
